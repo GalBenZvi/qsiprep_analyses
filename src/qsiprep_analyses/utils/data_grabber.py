@@ -2,9 +2,9 @@ from pathlib import Path
 from typing import Union
 
 import bids
+from bids.exceptions import ConfigError
 
 from qsiprep_analyses.data.bids import DEFAULT_PATH_PATTERNS
-
 
 
 class DataGrabber:
@@ -12,6 +12,11 @@ class DataGrabber:
     SUBJECT_TEMPLATE = "sub-"
     SESSION_TEMPLATE = "ses-"
     PATH_PATTERNS = DEFAULT_PATH_PATTERNS
+
+    #: Pybids configurations
+    PYBIDS_CONFIG = {
+        "qsiprep": "/home/groot/Projects/PhD/connectome_project/qsiprep_analyses/src/qsiprep_analyses/data/derivatives.json"
+    }
 
     def __init__(self, base_dir: Path, generate_layout: bool = True) -> None:
         self.base_dir = Path(base_dir)
@@ -27,8 +32,15 @@ class DataGrabber:
         bids.BIDSLayout
             A pybids' layout of *self.base_dir*
         """
+        try:
+            bids.layout.add_config_paths(**self.PYBIDS_CONFIG)
+        except ConfigError:
+            pass
         return bids.BIDSLayout(
-            self.base_dir, derivatives=False, validate=False
+            self.base_dir,
+            derivatives=False,
+            validate=False,
+            config=["bids", list(self.PYBIDS_CONFIG.keys())[0]],
         )
 
     def query_subjects(self) -> dict:

@@ -1,13 +1,17 @@
 from pathlib import Path
 from typing import List, Union
 
-from qsiprep_analyses.tensors.utils import DWI_ENTITIES
+from qsiprep_analyses.tensors.utils import DWI_ENTITIES, TENSOR_DERIVED_METRICS
 from qsiprep_analyses.utils.data_grabber import DataGrabber
 
 
 class TensorEstimation:
     #: Templates
     DWI_QUERY_ENTITIES = DWI_ENTITIES.copy()
+    METRICS = TENSOR_DERIVED_METRICS.copy()
+
+    #: Tensor types
+    TENSOR_TYPES = ["dt", "dk"]
 
     def __init__(
         self,
@@ -85,3 +89,20 @@ class TensorEstimation:
                 }
             )
         return result
+
+    def built_output_dictionary(
+        self, source: Path, tensor_type: str, outputs: list = None
+    ) -> dict:
+        outputs = outputs or self.METRICS.get(tensor_type)
+        return {
+            f"out_{output}": self.data_grabber.build_path(
+                source,
+                {
+                    "acquisition": tensor_type,
+                    "desc": output,
+                    "suffix": "dwiref",
+                    "resolution": "dwi",
+                },
+            )
+            for output in outputs
+        }
