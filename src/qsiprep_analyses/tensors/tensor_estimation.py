@@ -1,13 +1,18 @@
 from pathlib import Path
 from typing import List, Union
 
-from qsiprep_analyses.tensors.utils import DWI_ENTITIES, TENSOR_DERIVED_METRICS
+from qsiprep_analyses.tensors.utils import (
+    DWI_ENTITIES,
+    TENSOR_DERIVED_ENTITIES,
+    TENSOR_DERIVED_METRICS,
+)
 from qsiprep_analyses.utils.data_grabber import DataGrabber
 
 
 class TensorEstimation:
     #: Templates
     DWI_QUERY_ENTITIES = DWI_ENTITIES.copy()
+    TENSOR_ENTITIES = TENSOR_DERIVED_ENTITIES.copy()
     METRICS = TENSOR_DERIVED_METRICS.copy()
 
     #: Tensor types
@@ -93,6 +98,27 @@ class TensorEstimation:
     def built_output_dictionary(
         self, source: Path, tensor_type: str, outputs: list = None
     ) -> dict:
+        """
+        Based on a *source* DWI, reconstruct output names for tensor-derived metric available under *tensor_type*
+
+        Parameters
+        ----------
+        source : Path
+            The source DWI file.
+        tensor_type : str
+            The tensor estimation method (either "dt" or "dk")
+        outputs : list, optional
+            Requested tensor-derived outputs, by default All available
+
+        Returns
+        -------
+        dict
+            A dictionary with keys of available/requested outputs and their corresponding paths.
+        """
+        if tensor_type not in self.TENSOR_TYPES:
+            raise NotImplementedError(
+                f"Estimation of {tensor_type}-derived metrics is not yet implemented."
+            )
         outputs = outputs or self.METRICS.get(tensor_type)
         return {
             f"out_{output}": self.data_grabber.build_path(
@@ -100,8 +126,7 @@ class TensorEstimation:
                 {
                     "acquisition": tensor_type,
                     "desc": output,
-                    "suffix": "dwiref",
-                    "resolution": "dwi",
+                    **self.TENSOR_ENTITIES,
                 },
             )
             for output in outputs

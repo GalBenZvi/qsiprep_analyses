@@ -49,5 +49,8 @@
             "name": "subset",
             "pattern": "subset-([a-zA-Z0-9]+)"
         }
+    ],
+    "default_path_patterns": [
+        "sub-{subject}[/ses-{session}]/{datatype<dwi>|dwi}/sub-{subject}[_ses-{session}][_acq-{acquisition}][_dir-{direction}][_space-{space}][_res-{resolution}][_desc-{desc}][_part-{part}]_{suffix<dwi|dwiref|epiref|mask>}{extension<.bval|.bvec|.json|.nii.gz|.nii>|.nii.gz}"
     ]
 }

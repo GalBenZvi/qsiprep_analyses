@@ -4,19 +4,16 @@ from typing import Union
 import bids
 from bids.exceptions import ConfigError
 
-from qsiprep_analyses.data.bids import DEFAULT_PATH_PATTERNS
+from qsiprep_analyses.data.bids import BIDS_CONFIGURATION_FILE
 
 
 class DataGrabber:
     #: Templates
     SUBJECT_TEMPLATE = "sub-"
     SESSION_TEMPLATE = "ses-"
-    PATH_PATTERNS = DEFAULT_PATH_PATTERNS
 
     #: Pybids configurations
-    PYBIDS_CONFIG = {
-        "qsiprep": "/home/groot/Projects/PhD/connectome_project/qsiprep_analyses/src/qsiprep_analyses/data/derivatives.json"
-    }
+    PYBIDS_CONFIG = {"qsiprep": BIDS_CONFIGURATION_FILE}
 
     def __init__(self, base_dir: Path, generate_layout: bool = True) -> None:
         self.base_dir = Path(base_dir)
@@ -89,7 +86,6 @@ class DataGrabber:
         return Path(
             self.layout.build_path(
                 source,
-                path_patterns=self.PATH_PATTERNS,
                 validate=False,
                 strict=True,
             )

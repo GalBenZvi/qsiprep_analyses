@@ -1,3 +1,6 @@
+from pathlib import Path
+
+BIDS_CONFIGURATION_FILE = Path("src/qsiprep_analyses/data/derivatives.json")
 DEFAULT_PATH_PATTERNS = [
     "sub-{subject}[/ses-{session}]/{datatype<anat>|anat}/sub-{subject}[_ses-{session}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_space-{space}][_res-{resolution}][_part-{part}]_{suffix<T1w|T2w|T1rho|T1map|T2map|T2star|FLAIR|FLASH|PDmap|PD|PDT2|inplaneT[12]|angio>}{extension<.nii|.nii.gz|.json>|.nii.gz}",
     "sub-{subject}[/ses-{session}]/{datatype<anat>|anat}/sub-{subject}[_ses-{session}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_space-{space}][_res-{resolution}][_mod-{modality}]_{suffix<defacemask>}{extension<.nii|.nii.gz|.json>|.nii.gz}",
