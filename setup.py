@@ -14,17 +14,22 @@ from setuptools import setup
 
 
 def read(*names, **kwargs):
-    with io.open(join(dirname(__file__), *names), encoding=kwargs.get('encoding', 'utf8')) as fh:
+    with io.open(
+        join(dirname(__file__), *names),
+        encoding=kwargs.get('encoding', 'utf8'),
+    ) as fh:
         return fh.read()
 
 
 setup(
-    name='connectome-plasticity-project',
+    name='qsiprep_analyses',
     version='0.0.0',
     license='Apache-2.0',
     description='A package to process data derived from qsiprep pipeline',
     long_description='{}\n{}'.format(
-        re.compile('^.. start-badges.*^.. end-badges', re.M | re.S).sub('', read('README.rst')),
+        re.compile('^.. start-badges.*^.. end-badges', re.M | re.S).sub(
+            '', read('README.rst')
+        ),
         re.sub(':[a-z]+:`~?(.*?)`', r'``\1``', read('CHANGELOG.rst')),
     ),
     author='Gal Ben-Zvi',
