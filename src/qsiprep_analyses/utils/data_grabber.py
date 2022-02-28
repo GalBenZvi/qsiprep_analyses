@@ -52,15 +52,32 @@ class DataGrabber:
     def build_path(
         self, source: Union[dict, str, Path], replacements: dict
     ) -> Path:
+        """
+        Build a BIDS-compatible path according to source file/entities.
+
+        Parameters
+        ----------
+        source : Union[dict, str, Path]
+            Either a source file (to be parsed to entities) or its BIDS entities.
+        replacements : dict
+            A dictionary with keys as entities and values as replacement/addition values.
+
+        Returns
+        -------
+        Path
+            Path to BIDS-compatible path
+        """
         if isinstance(source, (str, Path)):
             source = bids.layout.parse_file_entities(source)
         for key, value in replacements.items():
             source[key] = value
-        return self.layout.build_path(
-            source,
-            path_patterns=self.PATH_PATTERNS,
-            validate=False,
-            strict=True,
+        return Path(
+            self.layout.build_path(
+                source,
+                path_patterns=self.PATH_PATTERNS,
+                validate=False,
+                strict=True,
+            )
         )
 
     @property
