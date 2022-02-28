@@ -6,6 +6,7 @@ import bids
 from qsiprep_analyses.data.bids import DEFAULT_PATH_PATTERNS
 
 
+
 class DataGrabber:
     #: Templates
     SUBJECT_TEMPLATE = "sub-"
@@ -26,7 +27,9 @@ class DataGrabber:
         bids.BIDSLayout
             A pybids' layout of *self.base_dir*
         """
-        return bids.BIDSLayout(self.base_dir, derivatives=True, validate=False)
+        return bids.BIDSLayout(
+            self.base_dir, derivatives=False, validate=False
+        )
 
     def query_subjects(self) -> dict:
         """

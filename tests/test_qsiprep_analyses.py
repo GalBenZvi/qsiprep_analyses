@@ -1,4 +1,3 @@
-
 from click.testing import CliRunner
 
 from qsiprep_analyses.cli import main
