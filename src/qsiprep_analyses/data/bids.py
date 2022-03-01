@@ -18,3 +18,5 @@ DEFAULT_PATH_PATTERNS = [
     "task-{task}[_acq-{acquisition}][_rec-{reconstruction}][_run-{run}][_echo-{echo}][_recording-{recording}]_{suffix<events>}{extension<.json>|.json}",
     "task-{task}[_acq-{acquisition}][_rec-{reconstruction}][_run-{run}][_echo-{echo}][_recording-{recording}]_{suffix<physio|stim>}{extension<.json>}",
 ]
+
+# flake8: noqa: E501

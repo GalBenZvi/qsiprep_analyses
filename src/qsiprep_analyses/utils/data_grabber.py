@@ -1,3 +1,6 @@
+"""
+Definition of the :class:`DataGrabber` class.
+"""
 from pathlib import Path
 from typing import Union
 
@@ -42,12 +45,14 @@ class DataGrabber:
 
     def query_subjects(self) -> dict:
         """
-        Queries a derivatives' directory and locates all available subjects and their corresponding sessions
+        Queries a derivatives' directory and locates all available subjects
+        and their corresponding sessions.
 
         Returns
         -------
         dict
-            A dictionary with participant labels as keys and available sessions as values
+            A dictionary with participant labels as keys and available
+            sessions as values
         """
         subjects = {
             subj.name.replace(self.SUBJECT_TEMPLATE, ""): [
@@ -70,9 +75,11 @@ class DataGrabber:
         Parameters
         ----------
         source : Union[dict, str, Path]
-            Either a source file (to be parsed to entities) or its BIDS entities.
+            Either a source file (to be parsed to entities) or its BIDS
+            entities
         replacements : dict
-            A dictionary with keys as entities and values as replacement/addition values.
+            A dictionary with keys as entities and values as
+            replacement/addition values
 
         Returns
         -------

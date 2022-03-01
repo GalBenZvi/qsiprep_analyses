@@ -19,45 +19,29 @@ Overview
     :target: https://qsiprep_analyses.readthedocs.io/
     :alt: Documentation Status
 
-.. |travis| image:: https://api.travis-ci.com/GalBenZvi/qsiprep_analyses.svg?branch=main
+.. |travis| image:: https://api.travis-ci.com/niparser/qsiprep_analyses.svg?branch=master
     :alt: Travis-CI Build Status
-    :target: https://travis-ci.com/github/GalBenZvi/qsiprep_analyses
+    :target: https://travis-ci.com/github/niparser/qsiprep_analyses
 
-.. |appveyor| image:: https://ci.appveyor.com/api/projects/status/github/GalBenZvi/qsiprep_analyses?branch=main&svg=true
+.. |appveyor| image:: https://ci.appveyor.com/api/projects/status/github/niparser/qsiprep_analyses?branch=master&svg=true
     :alt: AppVeyor Build Status
-    :target: https://ci.appveyor.com/project/GalBenZvi/qsiprep_analyses
+    :target: https://ci.appveyor.com/project/niparser/qsiprep_analyses
 
-.. |github-actions| image:: https://github.com/GalBenZvi/qsiprep_analyses/actions/workflows/github-actions.yml/badge.svg
+.. |github-actions| image:: https://github.com/niparser/qsiprep_analyses/actions/workflows/github-actions.yml/badge.svg
     :alt: GitHub Actions Build Status
-    :target: https://github.com/GalBenZvi/qsiprep_analyses/actions
+    :target: https://github.com/niparser/qsiprep_analyses/actions
 
-.. |requires| image:: https://requires.io/github/GalBenZvi/qsiprep_analyses/requirements.svg?branch=main
+.. |requires| image:: https://requires.io/github/niparser/qsiprep_analyses/requirements.svg?branch=master
     :alt: Requirements Status
-    :target: https://requires.io/github/GalBenZvi/qsiprep_analyses/requirements/?branch=main
+    :target: https://requires.io/github/niparser/qsiprep_analyses/requirements/?branch=master
 
-.. |codecov| image:: https://codecov.io/gh/GalBenZvi/qsiprep_analyses/branch/main/graphs/badge.svg?branch=main
+.. |codecov| image:: https://codecov.io/gh/niparser/qsiprep_analyses/branch/master/graphs/badge.svg?branch=master
     :alt: Coverage Status
-    :target: https://codecov.io/github/GalBenZvi/qsiprep_analyses
+    :target: https://codecov.io/github/niparser/qsiprep_analyses
 
-.. |version| image:: https://img.shields.io/pypi/v/connectome-plasticity-project.svg
-    :alt: PyPI Package latest release
-    :target: https://pypi.org/project/connectome-plasticity-project
-
-.. |wheel| image:: https://img.shields.io/pypi/wheel/connectome-plasticity-project.svg
-    :alt: PyPI Wheel
-    :target: https://pypi.org/project/connectome-plasticity-project
-
-.. |supported-versions| image:: https://img.shields.io/pypi/pyversions/connectome-plasticity-project.svg
-    :alt: Supported versions
-    :target: https://pypi.org/project/connectome-plasticity-project
-
-.. |supported-implementations| image:: https://img.shields.io/pypi/implementation/connectome-plasticity-project.svg
-    :alt: Supported implementations
-    :target: https://pypi.org/project/connectome-plasticity-project
-
-.. |commits-since| image:: https://img.shields.io/github/commits-since/GalBenZvi/qsiprep_analyses/v0.0.0.svg
+.. |commits-since| image:: https://img.shields.io/github/commits-since/niparser/qsiprep_analyses/v0.0.0.svg
     :alt: Commits since latest release
-    :target: https://github.com/GalBenZvi/qsiprep_analyses/compare/v0.0.0...main
+    :target: https://github.com/niparser/qsiprep_analyses/compare/v0.0.0...master
 
 
 
@@ -72,11 +56,11 @@ Installation
 
 ::
 
-    pip install connectome-plasticity-project
+    pip install qsiprep_analyses
 
 You can also install the in-development version with::
 
-    pip install https://github.com/GalBenZvi/qsiprep_analyses/archive/main.zip
+    pip install https://github.com/niparser/qsiprep_analyses/archive/master.zip
 
 
 Documentation

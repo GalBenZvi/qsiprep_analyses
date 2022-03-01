@@ -1,6 +1,5 @@
 """
-Entrypoint module, in case you use `python -mqsiprep_analyses`.
-
+Entrypoint module, in case you use `python -m qsiprep_analyses`.
 
 Why does this file exist, and why __main__? For more info, read:
 

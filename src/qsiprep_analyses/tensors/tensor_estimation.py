@@ -1,17 +1,16 @@
-import os
+"""
+Definition of the :class:`TensorEstimation` class.
+"""
 import warnings
 from pathlib import Path
 from typing import List, Tuple, Union
 
 from dipy.workflows.reconst import ReconstDkiFlow, ReconstDtiFlow
 
-from qsiprep_analyses.tensors.utils import (
-    DWI_ENTITIES,
-    KWARGS_MAPPING,
-    RECONSTRUCTION_COMMANDS,
-    TENSOR_DERIVED_ENTITIES,
-    TENSOR_DERIVED_METRICS,
-)
+from qsiprep_analyses.tensors.utils import (DWI_ENTITIES, KWARGS_MAPPING,
+                                            RECONSTRUCTION_COMMANDS,
+                                            TENSOR_DERIVED_ENTITIES,
+                                            TENSOR_DERIVED_METRICS)
 from qsiprep_analyses.utils.data_grabber import DataGrabber
 
 warnings.simplefilter("default", Warning)
@@ -44,7 +43,7 @@ class TensorEstimation:
         participant_labels: Union[str, List] = None,
     ) -> dict:
         """
-        Queries available sessions for *participant_labels*
+        Queries available sessions for *participant_labels*.
 
         Parameters
         ----------
@@ -54,7 +53,8 @@ class TensorEstimation:
         Returns
         -------
         dict
-            A dictionary with participant labels as keys and available sessions as values
+            A dictionary with participant labels as keys and available
+             sessions as values
         """
         if not participant_labels:
             return self.data_grabber.subjects
@@ -72,7 +72,8 @@ class TensorEstimation:
         self, participant_label: str, session: str = None
     ) -> List[dict]:
         """
-        Locate subject's available preprocessed DWIs and their corresponding gradients (.bvec and .bval)
+        Locate subject's available preprocessed DWIs and their corresponding
+        gradients (.bvec and .bval).
 
         Parameters
         ----------
@@ -84,7 +85,8 @@ class TensorEstimation:
         Returns
         -------
         List[dict]
-            A list of dictionary with keys of ["dwi","bvec","bval"] for all available DWIs
+            A list of dictionary with keys of ["dwi","bvec","bval"] for all
+            available DWIs
         """
         query = dict(
             subject=participant_label,
@@ -119,12 +121,12 @@ class TensorEstimation:
         Raises
         ------
         NotImplementedError
-            In case *tensor_type* is not an implemented key of recognized tensor-estimation protocol
+            In case *tensor_type* is not an implemented key of recognized
+            tensor-estimation protocol
         """
         if tensor_type not in self.TENSOR_TYPES:
-            raise NotImplementedError(
-                f"Estimation of {tensor_type}-derived metrics is not yet implemented."
-            )
+            message = f"Estimation of {tensor_type}-derived metrics is not yet implemented."  # noqa: E501
+            raise NotImplementedError(message)
 
     def validate_requested_output(self, tensor_type: str, output: str) -> bool:
         """
@@ -140,14 +142,15 @@ class TensorEstimation:
         Returns
         -------
         bool
-            Whether the requested *output* is a valid output of *tensor_type* derived metrics.
+            Whether the requested *output* is a valid output of *tensor_type*
+            derived metrics
         """
         if output in self.METRICS.get(tensor_type):
             return True
         else:
             warnings.warn(
                 f"""Requested output {output} is not a valid ({tensor_type}) tensor-derived metric.
-            Available metrics are: {', '.join(self.METRICS.get(tensor_type))}"""
+            Available metrics are: {', '.join(self.METRICS.get(tensor_type))}"""  # noqa: E501
             )
             return False
 
@@ -155,7 +158,8 @@ class TensorEstimation:
         self, source: Path, tensor_type: str, outputs: List[str] = None
     ) -> dict:
         """
-        Based on a *source* DWI, reconstruct output names for tensor-derived metric available under *tensor_type*
+        Based on a *source* DWI, reconstruct output names for tensor-derived
+        metric available under *tensor_type*.
 
         Parameters
         ----------
@@ -169,7 +173,8 @@ class TensorEstimation:
         Returns
         -------
         dict
-            A dictionary with keys of available/requested outputs and their corresponding paths.
+            A dictionary with keys of available/requested outputs and their
+            corresponding paths
         """
         self.validate_tensor_type(tensor_type)
         outputs = outputs or self.METRICS.get(tensor_type)
@@ -190,12 +195,14 @@ class TensorEstimation:
 
     def map_kwargs_to_workflow(self, inputs: dict) -> dict:
         """
-        Maps inputs' dictionary's keys to their corresponding kwargs in relevant Workflows.
+        Maps inputs' dictionary's keys to their corresponding kwargs in
+        relevant Workflows.
 
         Parameters
         ----------
         inputs : dict
-            A dictionary with keys of inputs and values of their corresponding paths.
+            A dictionary with keys of inputs and values of their corresponding
+            paths
 
         Returns
         -------
@@ -227,12 +234,13 @@ class TensorEstimation:
         tensor_type : Union[List, str], optional
             The tensor estimation method (either "dt" or "dk")
         out_metrics : Union[List, str], optional
-            Requested tensor-derived outputs, by default All available, by default None
+            Requested tensor-derived outputs, by default All available, by
+            default None
 
         Returns
         -------
         Tuple[List, List, List]
-            Validated tensor estimation protocol, sessions and output metrics.
+            Validated tensor estimation protocol, sessions and output metrics
         """
         tensor_types = tensor_type or self.TENSOR_TYPES
         if isinstance(tensor_type, str):
@@ -261,14 +269,17 @@ class TensorEstimation:
         tensor_type : str
             The tensor estimation method (either "dt" or "dk")
         out_metrics : list
-            Requested tensor-derived outputs, by default All available, by default None
+            Requested tensor-derived outputs, by default All available, by
+            default None
         force : bool
-            Whether to force the creation of outputs (rather than keeping pre-existing ones), by default False
+            Whether to force the creation of outputs (rather than keeping
+            pre-existing ones), by default False
 
         Returns
         -------
         dict
-            Dictionary with requested outputs as keys and their corresponding generated files' paths as values.
+            Dictionary with requested outputs as keys and their corresponding
+            generated files' paths as values.
         """
 
         self.validate_tensor_type(tensor_type)
@@ -291,7 +302,8 @@ class TensorEstimation:
         force: bool = False,
     ) -> dict:
         """
-        Locates session-specific DWI-related files and estimates their tensor-derived metrics
+        Locates session-specific DWI-related files and estimates their
+        tensor-derived metrics.
 
         Parameters
         ----------
@@ -302,14 +314,17 @@ class TensorEstimation:
         tensor_types : list
             The tensor estimation method(s) (either "dt" or "dk")
         out_metrics : list
-            Requested tensor-derived outputs, by default All available, by default None
+            Requested tensor-derived outputs, by default All available, by
+            default None
         force : bool
-            Whether to force the creation of outputs (rather than keeping pre-existing ones), by default False
+            Whether to force the creation of outputs (rather than keeping
+            pre-existing ones), by default False
 
         Returns
         -------
         dict
-            A dictionary with *tensor_types* as keys and a list of tensor-derived metrics as values.
+            A dictionary with *tensor_types* as keys and a list of
+            tensor-derived metrics as values
         """
         dwis = self.get_subject_dwi(participant_label, session)
         result = {}
@@ -331,7 +346,8 @@ class TensorEstimation:
         force: bool = False,
     ) -> dict:
         """
-        Run tensor-derived metrics' estimation for all available DWIs under *participant_label*
+        Run tensor-derived metrics' estimation for all available DWIs under
+        *participant_label*.
 
         Parameters
         ----------
@@ -342,14 +358,17 @@ class TensorEstimation:
         tensor_type : Union[List, str], optional
             The tensor estimation method (either "dt" or "dk")
         out_metrics : Union[List, str], optional
-            Requested tensor-derived outputs, by default All available, by default None
+            Requested tensor-derived outputs, by default All available, by
+            default None
         force : bool
-            Whether to force the creation of outputs (rather than keeping pre-existing ones), by default False
+            Whether to force the creation of outputs (rather than keeping
+            pre-existing ones), by default False
 
         Returns
         -------
         dict
-            A nested dictionary with sessions as keys and a dictionary for each *tensor_type* as values.
+            A nested dictionary with sessions as keys and a dictionary for
+            each *tensor_type* as values
         """
         tensor_types, sessions, out_metrics = self.validate_single_subject_run(
             participant_label, session, tensor_type, out_metrics
