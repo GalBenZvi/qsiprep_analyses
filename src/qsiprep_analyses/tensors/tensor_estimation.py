@@ -1,12 +1,17 @@
+import os
+import warnings
 from pathlib import Path
-from typing import List, Union
+from typing import List, Tuple, Union
 
 from qsiprep_analyses.tensors.utils import (
     DWI_ENTITIES,
+    RECONSTRUCTION_COMMANDS,
     TENSOR_DERIVED_ENTITIES,
     TENSOR_DERIVED_METRICS,
 )
 from qsiprep_analyses.utils.data_grabber import DataGrabber
+
+warnings.simplefilter("default", Warning)
 
 
 class TensorEstimation:
@@ -14,6 +19,7 @@ class TensorEstimation:
     DWI_QUERY_ENTITIES = DWI_ENTITIES.copy()
     TENSOR_ENTITIES = TENSOR_DERIVED_ENTITIES.copy()
     METRICS = TENSOR_DERIVED_METRICS.copy()
+    TENSOR_RECONSTRUCTION_COMMANDS = RECONSTRUCTION_COMMANDS.copy()
 
     #: Tensor types
     TENSOR_TYPES = ["dt", "dk"]
@@ -79,7 +85,7 @@ class TensorEstimation:
             **self.DWI_QUERY_ENTITIES,
         )
         if session:
-            query["session"] = (session,)
+            query["session"] = session
         dwi_files = self.data_grabber.layout.get(**query, return_type="file")
         result = []
         for dwi in dwi_files:
@@ -95,8 +101,52 @@ class TensorEstimation:
             )
         return result
 
-    def built_output_dictionary(
-        self, source: Path, tensor_type: str, outputs: list = None
+    def validate_tensor_type(self, tensor_type: str) -> None:
+        """
+        Validates *tensor_type* as an implemented tensor estimation protocol.
+
+        Parameters
+        ----------
+        tensor_type : str
+            The tensor estimation method (either "dt" or "dk")
+
+        Raises
+        ------
+        NotImplementedError
+            In case *tensor_type* is not an implemented key of recognized tensor-estimation protocol
+        """
+        if tensor_type not in self.TENSOR_TYPES:
+            raise NotImplementedError(
+                f"Estimation of {tensor_type}-derived metrics is not yet implemented."
+            )
+
+    def validate_requested_output(self, tensor_type: str, output: str) -> bool:
+        """
+        Validates a requested output to be a valid *tensor_type* derived metric
+
+        Parameters
+        ----------
+        tensor_type : str
+            The tensor estimation method (either "dt" or "dk")
+        output : str
+            The requested output
+
+        Returns
+        -------
+        bool
+            Whether the requested *output* is a valid output of *tensor_type* derived metrics.
+        """
+        if output in self.METRICS.get(tensor_type):
+            return True
+        else:
+            warnings.warn(
+                f"""Requested output {output} is not a valid ({tensor_type}) tensor-derived metric.
+            Available metrics are: {', '.join(self.METRICS.get(tensor_type))}"""
+            )
+            return False
+
+    def build_output_dictionary(
+        self, source: Path, tensor_type: str, outputs: List[str] = None
     ) -> dict:
         """
         Based on a *source* DWI, reconstruct output names for tensor-derived metric available under *tensor_type*
@@ -115,10 +165,7 @@ class TensorEstimation:
         dict
             A dictionary with keys of available/requested outputs and their corresponding paths.
         """
-        if tensor_type not in self.TENSOR_TYPES:
-            raise NotImplementedError(
-                f"Estimation of {tensor_type}-derived metrics is not yet implemented."
-            )
+        self.validate_tensor_type(tensor_type)
         outputs = outputs or self.METRICS.get(tensor_type)
         return {
             f"out_{output}": self.data_grabber.build_path(
@@ -130,4 +177,210 @@ class TensorEstimation:
                 },
             )
             for output in outputs
+            if self.validate_requested_output(tensor_type, output)
         }
+
+    def reformat_outputs(self, outputs: dict) -> str:
+        """
+        Reformat output dictionary into compatible CLI keyword arguments
+
+        Parameters
+        ----------
+        outputs : dict
+            A dictionary with keys of keyword arguments and values as outputs.
+
+        Returns
+        -------
+        str
+            A reformatted, CLI-compatible set of kwargs
+        """
+        metrics = " ".join([i.split("_")[-1] for i in list(outputs.keys())])
+        string_outputs = f"--save_metric {metrics}"
+        for key, val in outputs.items():
+            string_outputs += f" --{key} {val}"
+
+        return string_outputs
+
+    def generate_command(
+        self,
+        inputs: dict,
+        tensor_type: str,
+        outputs: List[str] = None,
+        force: bool = False,
+    ):
+        """
+        Generates the CLI required to produce tensor-derived metric of type *tensor_type*.
+
+        Parameters
+        ----------
+        inputs : dict
+            An input dicrionary with keys of ["dwi","bval","bvec","mask"]
+        tensor_type : str
+            The tensor estimation method (either "dt" or "dk")
+        force : bool
+            Whether to force the creation of outputs (rather than keeping pre-existing ones), by default False
+        """
+        self.validate_tensor_type(tensor_type)
+        outputs = self.build_output_dictionary(
+            inputs.get("dwi"), tensor_type, outputs
+        )
+        string_outputs = self.reformat_outputs(outputs)
+        base_command, args_template = [
+            self.TENSOR_RECONSTRUCTION_COMMANDS.get(key)
+            for key in [tensor_type, "args"]
+        ]
+        args = args_template.format(outputs=string_outputs, **inputs)
+        cmd = f"{base_command} {args}"
+        if force:
+            cmd += " --force"
+        return cmd, outputs
+
+    def validate_single_subject_run(
+        self,
+        participant_label: str,
+        session: Union[List, str] = None,
+        tensor_type: Union[List, str] = None,
+        out_metrics: Union[List, str] = None,
+    ) -> Tuple[List, List, List]:
+        """
+        Validates the requested single-subject run's properties
+
+        Parameters
+        ----------
+        participant_label : str
+            Specific participants' labels to be queried
+        session : Union[List, str], optional
+            Specific session's ID, by default None
+        tensor_type : Union[List, str], optional
+            The tensor estimation method (either "dt" or "dk")
+        out_metrics : Union[List, str], optional
+            Requested tensor-derived outputs, by default All available, by default None
+
+        Returns
+        -------
+        Tuple[List, List, List]
+            Validated tensor estimation protocol, sessions and output metrics.
+        """
+        tensor_types = tensor_type or self.TENSOR_TYPES
+        if isinstance(tensor_type, str):
+            tensor_types = [tensor_type]
+        sessions = session or self.subjects.get(participant_label)
+        if isinstance(sessions, str):
+            sessions = [sessions]
+        if isinstance(out_metrics, str):
+            out_metrics = [out_metrics]
+        return tensor_types, sessions, out_metrics
+
+    def run_single_input(
+        self,
+        inputs: dict,
+        tensor_type: str,
+        out_metrics: list = None,
+        force: bool = False,
+    ) -> dict:
+        """
+        Runs a single input set (DWI and its corresponding files)
+
+        Parameters
+        ----------
+        inputs : dict
+            A dictionary with keys of ["dwi","bval","bvec","mask"]
+        tensor_type : str
+            The tensor estimation method (either "dt" or "dk")
+        out_metrics : list
+            Requested tensor-derived outputs, by default All available, by default None
+        force : bool
+            Whether to force the creation of outputs (rather than keeping pre-existing ones), by default False
+
+        Returns
+        -------
+        dict
+            Dictionary with requested outputs as keys and their corresponding generated files' paths as values.
+        """
+
+        cmd, outputs = self.generate_command(
+            inputs, tensor_type, out_metrics, force
+        )
+        flag = [not i.exists() for i in outputs.values()]
+        if any(flag) or force:
+            os.system(cmd)
+        return outputs
+
+    def run_single_session(
+        self,
+        participant_label: str,
+        session: str,
+        tensor_types: list,
+        out_metrics: list = None,
+        force: bool = False,
+    ) -> dict:
+        """
+        Locates session-specific DWI-related files and estimates their tensor-derived metrics
+
+        Parameters
+        ----------
+        participant_label : str
+            Specific participants' labels to be analyzed
+        session : str
+            Specific session's ID
+        tensor_types : list
+            The tensor estimation method(s) (either "dt" or "dk")
+        out_metrics : list
+            Requested tensor-derived outputs, by default All available, by default None
+        force : bool
+            Whether to force the creation of outputs (rather than keeping pre-existing ones), by default False
+
+        Returns
+        -------
+        dict
+            A dictionary with *tensor_types* as keys and a list of tensor-derived metrics as values.
+        """
+        dwis = self.get_subject_dwi(participant_label, session)
+        result = {}
+        for tensor_type in tensor_types:
+            result[tensor_type] = []
+            for inputs in dwis:
+                outputs = self.run_single_input(
+                    inputs, tensor_type, out_metrics, force
+                )
+                result[tensor_type].append(outputs)
+        return result
+
+    def run_single_subject(
+        self,
+        participant_label: str,
+        session: Union[List, str] = None,
+        tensor_type: Union[List, str] = None,
+        out_metrics: Union[List, str] = None,
+        force: bool = False,
+    ) -> dict:
+        """
+        Run tensor-derived metrics' estimation for all available DWIs under *participant_label*
+
+        Parameters
+        ----------
+        participant_label : str
+            Specific participants' labels to be queried
+        session : Union[List, str], optional
+            Specific session's ID, by default None
+        tensor_type : Union[List, str], optional
+            The tensor estimation method (either "dt" or "dk")
+        out_metrics : Union[List, str], optional
+            Requested tensor-derived outputs, by default All available, by default None
+        force : bool
+            Whether to force the creation of outputs (rather than keeping pre-existing ones), by default False
+
+        Returns
+        -------
+        dict
+            A nested dictionary with sessions as keys and a dictionary for each *tensor_type* as values.
+        """
+        tensor_types, sessions, out_metrics = self.validate_single_subject_run(
+            participant_label, session, tensor_type, out_metrics
+        )
+        result = {}
+        for session in sessions:
+            result[session] = self.run_single_session(
+                participant_label, session, tensor_types, out_metrics, force
+            )
+        return result

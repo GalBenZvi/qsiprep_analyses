@@ -19,3 +19,10 @@ TENSOR_DERIVED_METRICS = dict(
         "rk",
     ],
 )
+
+KWARGS = "{outputs} {dwi} {bval} {bvec} {mask}"
+DIPY_FIT_DTI_CMD = "dipy_fit_dti"
+DIPY_FIT_DKI_CMD = "dipy_fit_dki"
+RECONSTRUCTION_COMMANDS = dict(
+    dt=DIPY_FIT_DTI_CMD, dk=DIPY_FIT_DKI_CMD, args=KWARGS
+)
