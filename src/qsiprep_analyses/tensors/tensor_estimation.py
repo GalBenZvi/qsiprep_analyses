@@ -3,8 +3,11 @@ import warnings
 from pathlib import Path
 from typing import List, Tuple, Union
 
+from dipy.workflows.reconst import ReconstDkiFlow, ReconstDtiFlow
+
 from qsiprep_analyses.tensors.utils import (
     DWI_ENTITIES,
+    KWARGS_MAPPING,
     RECONSTRUCTION_COMMANDS,
     TENSOR_DERIVED_ENTITIES,
     TENSOR_DERIVED_METRICS,
@@ -21,6 +24,9 @@ class TensorEstimation:
     METRICS = TENSOR_DERIVED_METRICS.copy()
     TENSOR_RECONSTRUCTION_COMMANDS = RECONSTRUCTION_COMMANDS.copy()
 
+    #: Tensor Workflows
+    TENSOR_FITTING_KWARGS = KWARGS_MAPPING
+    TENSOR_WORKFLOWS = {"dt": ReconstDtiFlow, "dk": ReconstDkiFlow}
     #: Tensor types
     TENSOR_TYPES = ["dt", "dk"]
 
@@ -168,72 +174,39 @@ class TensorEstimation:
         self.validate_tensor_type(tensor_type)
         outputs = outputs or self.METRICS.get(tensor_type)
         return {
-            f"out_{output}": self.data_grabber.build_path(
-                source,
-                {
-                    "acquisition": tensor_type,
-                    "desc": output,
-                    **self.TENSOR_ENTITIES,
-                },
+            f"out_{output}": str(
+                self.data_grabber.build_path(
+                    source,
+                    {
+                        "acquisition": tensor_type,
+                        "desc": output,
+                        **self.TENSOR_ENTITIES,
+                    },
+                )
             )
             for output in outputs
             if self.validate_requested_output(tensor_type, output)
         }
 
-    def reformat_outputs(self, outputs: dict) -> str:
+    def map_kwargs_to_workflow(self, inputs: dict) -> dict:
         """
-        Reformat output dictionary into compatible CLI keyword arguments
-
-        Parameters
-        ----------
-        outputs : dict
-            A dictionary with keys of keyword arguments and values as outputs.
-
-        Returns
-        -------
-        str
-            A reformatted, CLI-compatible set of kwargs
-        """
-        metrics = " ".join([i.split("_")[-1] for i in list(outputs.keys())])
-        string_outputs = f"--save_metric {metrics}"
-        for key, val in outputs.items():
-            string_outputs += f" --{key} {val}"
-
-        return string_outputs
-
-    def generate_command(
-        self,
-        inputs: dict,
-        tensor_type: str,
-        outputs: List[str] = None,
-        force: bool = False,
-    ):
-        """
-        Generates the CLI required to produce tensor-derived metric of type *tensor_type*.
+        Maps inputs' dictionary's keys to their corresponding kwargs in relevant Workflows.
 
         Parameters
         ----------
         inputs : dict
-            An input dicrionary with keys of ["dwi","bval","bvec","mask"]
-        tensor_type : str
-            The tensor estimation method (either "dt" or "dk")
-        force : bool
-            Whether to force the creation of outputs (rather than keeping pre-existing ones), by default False
+            A dictionary with keys of inputs and values of their corresponding paths.
+
+        Returns
+        -------
+        dict
+            The same dictionary with keys that match workflows' kwargs
         """
-        self.validate_tensor_type(tensor_type)
-        outputs = self.build_output_dictionary(
-            inputs.get("dwi"), tensor_type, outputs
-        )
-        string_outputs = self.reformat_outputs(outputs)
-        base_command, args_template = [
-            self.TENSOR_RECONSTRUCTION_COMMANDS.get(key)
-            for key in [tensor_type, "args"]
-        ]
-        args = args_template.format(outputs=string_outputs, **inputs)
-        cmd = f"{base_command} {args}"
-        if force:
-            cmd += " --force"
-        return cmd, outputs
+        workflow_kwargs = {}
+        for key, val in inputs.items():
+            kwarg = self.TENSOR_FITTING_KWARGS.get(key) or key
+            workflow_kwargs[kwarg] = str(val)
+        return workflow_kwargs
 
     def validate_single_subject_run(
         self,
@@ -298,12 +271,15 @@ class TensorEstimation:
             Dictionary with requested outputs as keys and their corresponding generated files' paths as values.
         """
 
-        cmd, outputs = self.generate_command(
-            inputs, tensor_type, out_metrics, force
+        self.validate_tensor_type(tensor_type)
+        outputs = self.build_output_dictionary(
+            inputs.get("dwi"), tensor_type, out_metrics
         )
-        flag = [not i.exists() for i in outputs.values()]
-        if any(flag) or force:
-            os.system(cmd)
+        workflow_kwargs = self.map_kwargs_to_workflow(inputs)
+        wf = self.TENSOR_WORKFLOWS.get(tensor_type)
+        runner = wf(force=force)
+        runner.run(**workflow_kwargs, **outputs)
+
         return outputs
 
     def run_single_session(

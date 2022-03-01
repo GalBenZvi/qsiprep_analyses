@@ -20,6 +20,14 @@ TENSOR_DERIVED_METRICS = dict(
     ],
 )
 
+KWARGS_MAPPING = dict(
+    dwi="input_files",
+    bval="bvalues_files",
+    bvec="bvectors_files",
+    mask="mask_files",
+    out_metrics="save_metrics",
+)
+
 KWARGS = "{outputs} {dwi} {bval} {bvec} {mask}"
 DIPY_FIT_DTI_CMD = "dipy_fit_dti"
 DIPY_FIT_DKI_CMD = "dipy_fit_dki"
