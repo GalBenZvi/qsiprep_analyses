@@ -32,8 +32,22 @@ class NativeParcellation:
         )
         self.subjects = collect_subjects(self, participant_labels)
 
-    def get_transform(self, participant_label: str):
+    def get_transform(self, participant_label: str) -> list[str]:
+        """
+        Locates subject-specific transformation warp from standard (MNI) space to native.
+
+        Parameters
+        ----------
+        participant_label : str
+            Specific participants' labels to be queried
+
+        Returns
+        -------
+        list[str]
+            List of paths to MNI-to-native transforms (.h5)
+        """
         query = dict(
             subject=participant_label,
             **self.QUERIES.get("mni2native_transform")
         )
+        return self.data_grabber.layout.get(**query)
