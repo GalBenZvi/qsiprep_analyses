@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Union
 
 from qsiprep_analyses.parcellations.messages import MISSING_DATAGRABBER
 from qsiprep_analyses.utils.data_grabber import DataGrabber
@@ -29,3 +30,34 @@ def validate_instantiation(
     if base_dir:
         return DataGrabber(base_dir)
     raise ValueError(MISSING_DATAGRABBER.format(object_name=instance.__name__))
+
+
+def collect_subjects(
+    instance: object,
+    participant_labels: Union[str, list] = None,
+) -> dict:
+    """
+    Queries available sessions for *participant_labels*.
+
+    Parameters
+    ----------
+    participant_labels : Union[str, List], optional
+        Specific participants' labels to be queried, by default None
+
+    Returns
+    -------
+    dict
+        A dictionary with participant labels as keys and available
+         sessions as values
+    """
+    if not participant_labels:
+        return instance.data_grabber.subjects
+
+    if isinstance(participant_labels, str):
+        participant_labels = [participant_labels]
+    return {
+        participant_label: instance.data_grabber.subjects.get(
+            participant_label
+        )
+        for participant_label in participant_labels
+    }
