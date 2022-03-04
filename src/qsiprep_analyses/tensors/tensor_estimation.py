@@ -8,6 +8,11 @@ from typing import List, Tuple, Union
 import tqdm
 from dipy.workflows.reconst import ReconstDkiFlow, ReconstDtiFlow
 
+from qsiprep_analyses.tensors.messages import (
+    INVALID_OUTPUT,
+    INVALID_PARTICIPANT,
+    TENSOR_RECONSTRUCTION_NOT_IMPLEMENTED,
+)
 from qsiprep_analyses.tensors.utils import (
     DWI_ENTITIES,
     KWARGS_MAPPING,
@@ -135,8 +140,11 @@ class TensorEstimation:
             tensor-estimation protocol
         """
         if tensor_type not in self.TENSOR_TYPES:
-            message = f"Estimation of {tensor_type}-derived metrics is not yet implemented."  # noqa: E501
-            raise NotImplementedError(message)
+            raise NotImplementedError(
+                TENSOR_RECONSTRUCTION_NOT_IMPLEMENTED.format(
+                    tensor_type=tensor_type
+                )
+            )
         return self.TENSOR_TYPES.get(tensor_type)
 
     def validate_requested_output(self, tensor_type: str, output: str) -> bool:
@@ -159,9 +167,13 @@ class TensorEstimation:
         if output in self.METRICS.get(tensor_type):
             return True
         else:
+
             warnings.warn(
-                f"""Requested output {output} is not a valid ({tensor_type}) tensor-derived metric.
-            Available metrics are: {', '.join(self.METRICS.get(tensor_type))}"""  # noqa: E501
+                INVALID_OUTPUT.format(
+                    output=output,
+                    tensor_type=tensor_type,
+                    available_metrics=", ".join(self.METRICS.get(tensor_type)),
+                )
             )
             return False
 
@@ -264,7 +276,10 @@ class TensorEstimation:
         """
         if participant_label not in self.subjects:
             raise ValueError(
-                f"participant_label must describe an existing participant in QSIprep derivatives' directory ({self.data_grabber.base_dir}), but a value of {participant_label} was passed."
+                INVALID_PARTICIPANT.format(
+                    base_dir=self.data_grabber.base_dir,
+                    participant_label=participant_label,
+                )
             )
         tensor_types = tensor_type or list(self.TENSOR_TYPES.keys())
         if isinstance(tensor_type, str):
@@ -423,13 +438,13 @@ class TensorEstimation:
         Parameters
         ----------
         participant_label : Union[str, list], optional
-            Specific subject\s within the dataset to run, by default None
+            Specific subject/s within the dataset to run, by default None
         tensor_type : Union[List, str], optional
             Type of tensor estimation to perform, by default All implemented
         out_metrics : Union[List, str], optional
             Specific metric of the tensor to produce, by default All
         force : bool, optional
-            Whether to remove existing product and generate new ones, by default False
+            Whether to remove existing product and generate new ones, by default False #noqa
 
         Returns
         -------
