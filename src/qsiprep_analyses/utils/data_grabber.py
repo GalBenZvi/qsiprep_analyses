@@ -1,16 +1,22 @@
+"""
+Definition of the :class:`DataGrabber` class.
+"""
 from pathlib import Path
 from typing import Union
 
 import bids
+from bids.exceptions import ConfigError
 
-from qsiprep_analyses.data.bids import DEFAULT_PATH_PATTERNS
+from qsiprep_analyses.data.bids import BIDS_CONFIGURATION_FILE
 
 
 class DataGrabber:
     #: Templates
     SUBJECT_TEMPLATE = "sub-"
     SESSION_TEMPLATE = "ses-"
-    PATH_PATTERNS = DEFAULT_PATH_PATTERNS
+
+    #: Pybids configurations
+    PYBIDS_CONFIG = {"qsiprep": BIDS_CONFIGURATION_FILE}
 
     def __init__(self, base_dir: Path, generate_layout: bool = True) -> None:
         self.base_dir = Path(base_dir)
@@ -26,16 +32,27 @@ class DataGrabber:
         bids.BIDSLayout
             A pybids' layout of *self.base_dir*
         """
-        return bids.BIDSLayout(self.base_dir, derivatives=True, validate=False)
+        try:
+            bids.layout.add_config_paths(**self.PYBIDS_CONFIG)
+        except ConfigError:
+            pass
+        return bids.BIDSLayout(
+            self.base_dir,
+            derivatives=False,
+            validate=False,
+            config=["bids", list(self.PYBIDS_CONFIG.keys())[0]],
+        )
 
     def query_subjects(self) -> dict:
         """
-        Queries a derivatives' directory and locates all available subjects and their corresponding sessions
+        Queries a derivatives' directory and locates all available subjects
+        and their corresponding sessions.
 
         Returns
         -------
         dict
-            A dictionary with participant labels as keys and available sessions as values
+            A dictionary with participant labels as keys and available
+            sessions as values
         """
         subjects = {
             subj.name.replace(self.SUBJECT_TEMPLATE, ""): [
@@ -58,9 +75,11 @@ class DataGrabber:
         Parameters
         ----------
         source : Union[dict, str, Path]
-            Either a source file (to be parsed to entities) or its BIDS entities.
+            Either a source file (to be parsed to entities) or its BIDS
+            entities
         replacements : dict
-            A dictionary with keys as entities and values as replacement/addition values.
+            A dictionary with keys as entities and values as
+            replacement/addition values
 
         Returns
         -------
@@ -74,7 +93,6 @@ class DataGrabber:
         return Path(
             self.layout.build_path(
                 source,
-                path_patterns=self.PATH_PATTERNS,
                 validate=False,
                 strict=True,
             )
