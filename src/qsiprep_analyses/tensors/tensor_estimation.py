@@ -2,6 +2,7 @@
 Definition of the :class:`TensorEstimation` class.
 """
 import warnings
+from email.mime import base
 from pathlib import Path
 from typing import List, Tuple, Union
 
@@ -20,6 +21,10 @@ from qsiprep_analyses.tensors.utils import (
     TENSOR_DERIVED_METRICS,
 )
 from qsiprep_analyses.utils.data_grabber import DataGrabber
+from qsiprep_analyses.utils.utils import (
+    collect_subjects,
+    validate_instantiation,
+)
 
 warnings.simplefilter("default", Warning)
 
@@ -46,42 +51,14 @@ class TensorEstimation:
 
     def __init__(
         self,
+        base_dir: Path = None,
         data_grabber: DataGrabber = None,
-        participant_labels: Union[str, List] = None,
+        participant_labels: Union[str, list] = None,
     ) -> None:
-        if data_grabber:
-            self.data_grabber = data_grabber
-        self.subjects = self.get_subjects(participant_labels)
-
-    def get_subjects(
-        self,
-        participant_labels: Union[str, List] = None,
-    ) -> dict:
-        """
-        Queries available sessions for *participant_labels*.
-
-        Parameters
-        ----------
-        participant_labels : Union[str, List], optional
-            Specific participants' labels to be queried, by default None
-
-        Returns
-        -------
-        dict
-            A dictionary with participant labels as keys and available
-             sessions as values
-        """
-        if not participant_labels:
-            return self.data_grabber.subjects
-
-        if isinstance(participant_labels, str):
-            participant_labels = [participant_labels]
-        return {
-            participant_label: self.data_grabber.subjects.get(
-                participant_label
-            )
-            for participant_label in participant_labels
-        }
+        self.data_grabber = validate_instantiation(
+            self, base_dir, data_grabber
+        )
+        self.subjects = collect_subjects(self, participant_labels)
 
     def get_subject_dwi(
         self, participant_label: str, session: str = None
