@@ -1,8 +1,8 @@
 from pathlib import Path
 from typing import Union
 
-from qsiprep_analyses.parcellations.messages import MISSING_DATAGRABBER
 from qsiprep_analyses.utils.data_grabber import DataGrabber
+from qsiprep_analyses.utils.messages import MISSING_DATAGRABBER
 
 
 def validate_instantiation(
