@@ -63,3 +63,26 @@ def collect_subjects(
         )
         for participant_label in participant_labels
     }
+
+
+def apply_bids_filters(original: dict, replacements: dict) -> dict:
+    """
+    Change an *original* bids-filters' query according to *replacements*
+
+    Parameters
+    ----------
+    original : dict
+        Original filters
+    replacements : dict
+        Replacement entities
+
+    Returns
+    -------
+    dict
+        Combined entities for bids query
+    """
+    combined_filters = original.copy()
+    if isinstance(replacements, dict):
+        for key, value in replacements.items():
+            combined_filters[key] = value
+    return combined_filters
