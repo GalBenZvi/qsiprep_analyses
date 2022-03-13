@@ -34,7 +34,8 @@ class NativeParcellation:
 
     def get_transform(self, participant_label: str) -> list[str]:
         """
-        Locates subject-specific transformation warp from standard (MNI) space to native.
+        Locates subject-specific transformation warp from standard (MNI) space
+        to native.
 
         Parameters
         ----------
