@@ -66,6 +66,7 @@ setup(
     python_requires=">=3.6",
     install_requires=["click", "dipy", "pybids"],
     extras_require={
+        "dev": ["pre-commit"],
         "test": ["pytest", "tox"],
     },
     entry_points={
