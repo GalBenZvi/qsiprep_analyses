@@ -13,6 +13,7 @@ from tqdm import tqdm
 
 from qsiprep_analyses.utils.data_grabber import DataGrabber
 from qsiprep_analyses.utils.utils import (
+    apply_bids_filters,
     collect_subjects,
     validate_instantiation,
 )
@@ -70,28 +71,6 @@ class NativeParcellation:
         self.subjects = collect_subjects(self, participant_labels)
         self.parcellation_manager = parcellation_manager()
 
-    def apply_bids_filters(self, original: dict, replacements: dict) -> dict:
-        """
-        Change an *original* bids-filters' query according to *replacements*
-
-        Parameters
-        ----------
-        original : dict
-            Original filters
-        replacements : dict
-            Replacement entities
-
-        Returns
-        -------
-        dict
-            Combined entities for bids query
-        """
-        combined_filters = original.copy()
-        if isinstance(replacements, dict):
-            for key, value in replacements.items():
-                combined_filters[key] = value
-        return combined_filters
-
     def get_transforms(
         self, participant_label: str, bids_filters: dict = None
     ) -> dict:
@@ -116,7 +95,7 @@ class NativeParcellation:
             query = dict(
                 subject=participant_label, **self.QUERIES.get(transform)
             )
-            query = self.apply_bids_filters(query, bids_filters)
+            query = apply_bids_filters(query, bids_filters)
             result = self.data_grabber.layout.get(**query)
             transforms[transform] = Path(result[0].path) if result else None
         return transforms
@@ -151,7 +130,7 @@ class NativeParcellation:
             subject=participant_label,
             **self.QUERIES.get(f"{reference_type}_reference"),
         )
-        query = self.apply_bids_filters(query, bids_filters)
+        query = apply_bids_filters(query, bids_filters)
         result = self.data_grabber.layout.get(**query)
         return Path(result[0].path) if result else None
 
@@ -183,7 +162,7 @@ class NativeParcellation:
             label=tissue_type.upper(),
             **self.QUERIES.get("probseg"),
         )
-        query = self.apply_bids_filters(query, bids_filters)
+        query = apply_bids_filters(query, bids_filters)
         result = self.data_grabber.layout.get(**query)
         return Path(result[0].path) if result else None
 
