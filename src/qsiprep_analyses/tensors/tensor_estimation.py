@@ -437,11 +437,14 @@ class TensorEstimation:
         else:
             participant_labels = list(self.subjects.keys())
         for participant_label in tqdm.tqdm(participant_labels):
-            sessions = self.subjects.get(participant_label)
-            tensor_metrics[participant_label] = self.run_single_subject(
-                participant_label=participant_label,
-                session=sessions,
-                tensor_type=tensor_type,
-                out_metrics=out_metrics,
-                force=force,
-            )
+            try:
+                sessions = self.subjects.get(participant_label)
+                tensor_metrics[participant_label] = self.run_single_subject(
+                    participant_label=participant_label,
+                    session=sessions,
+                    tensor_type=tensor_type,
+                    out_metrics=out_metrics,
+                    force=force,
+                )
+            except TypeError:
+                continue
