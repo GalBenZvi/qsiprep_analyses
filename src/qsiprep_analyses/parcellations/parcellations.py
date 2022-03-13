@@ -9,6 +9,7 @@ from brain_parts.parcellation.parcellations import (
     Parcellation as parcellation_manager,
 )
 from nilearn.image.resampling import resample_to_img
+from tqdm import tqdm
 
 from qsiprep_analyses.utils.data_grabber import DataGrabber
 from qsiprep_analyses.utils.utils import (
@@ -401,3 +402,41 @@ class NativeParcellation:
                 "gm_cropped": gm_cropped,
             }
         return outputs
+
+    def run_dataset(
+        self,
+        parcellation_scheme: str,
+        participant_label: Union[str, list] = None,
+        probseg_threshold: float = None,
+        force: bool = False,
+    ):
+        """
+        Register *parcellation_scheme* to all available (or requested) subjects' native space.
+
+        Parameters
+        ----------
+        parcellation_scheme : str
+            A string representing existing key within *self.parcellation_manager.parcellations*. # noqa
+        participant_label : Union[str, list], optional
+            Specific subject/s within the dataset to run, by default None
+        probseg_threshold : float, optional
+            Threshold for probability segmentation masking, by default None
+        force : bool, optional
+            Whether to remove existing products and generate new ones, by default False # noqa
+        """
+        native_parcellations = {}
+        if participant_label:
+            if isinstance(participant_label, str):
+                participant_labels = [participant_label]
+            elif isinstance(participant_label, list):
+                participant_labels = participant_label
+        else:
+            participant_labels = list(sorted(self.subjects.keys()))
+        for participant_label in tqdm(participant_labels):
+            native_parcellations[participant_label] = self.run_single_subject(
+                parcellation_scheme,
+                participant_label,
+                probseg_threshold=probseg_threshold,
+                force=force,
+            )
+        return native_parcellations

@@ -420,7 +420,7 @@ class TensorEstimation:
         out_metrics : Union[List, str], optional
             Specific metric of the tensor to produce, by default All
         force : bool, optional
-            Whether to remove existing product and generate new ones, by default False # noqa
+            Whether to remove existing products and generate new ones, by default False # noqa
 
         Returns
         -------
