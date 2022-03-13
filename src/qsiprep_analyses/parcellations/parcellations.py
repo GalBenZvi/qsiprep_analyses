@@ -85,7 +85,8 @@ class NativeParcellation:
         self, participant_label: str, bids_filters: dict = None
     ) -> dict:
         """
-        Locates subject-specific transformation warp from standard (MNI) space to native.
+        Locates subject-specific transformation warp from standard (MNI) space
+        to native.
 
         Parameters
         ----------

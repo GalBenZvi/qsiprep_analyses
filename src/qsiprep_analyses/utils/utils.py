@@ -11,14 +11,16 @@ def validate_instantiation(
     data_grabber: DataGrabber = None,
 ) -> DataGrabber:
     """
-    Validates the instansitation of *NativeParcellation* object with base directory or DataGrabber instance.
+    Validates the instansitation of *NativeParcellation* object with base
+    directory or DataGrabber instance.
 
     Parameters
     ----------
     base_dir : Path, optional
         A base directory of *qsiprep*'s derivatives, by default None
     data_grabber : DataGrabber, optional
-        A DataGrabber instance, already instansiated with a *base_dir*, by default None
+        A DataGrabber instance, already instansiated with a *base_dir*, by
+        default None
 
     Returns
     -------

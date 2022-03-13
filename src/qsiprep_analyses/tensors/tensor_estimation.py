@@ -2,7 +2,6 @@
 Definition of the :class:`TensorEstimation` class.
 """
 import warnings
-from email.mime import base
 from pathlib import Path
 from typing import List, Tuple, Union
 
