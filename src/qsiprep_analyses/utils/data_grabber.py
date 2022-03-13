@@ -32,10 +32,8 @@ class DataGrabber:
         bids.BIDSLayout
             A pybids' layout of *self.base_dir*
         """
-        try:
-            bids.layout.add_config_paths(**self.PYBIDS_CONFIG)
-        except ConfigError:
-            pass
+        bids.config.reset_options()
+        bids.layout.add_config_paths(**self.PYBIDS_CONFIG)  # pass
         return bids.BIDSLayout(
             self.base_dir,
             derivatives=False,
