@@ -9,13 +9,21 @@ import tqdm
 from dipy.workflows.reconst import ReconstDkiFlow, ReconstDtiFlow
 
 from qsiprep_analyses.tensors.messages import (
-    INVALID_OUTPUT, INVALID_PARTICIPANT, TENSOR_RECONSTRUCTION_NOT_IMPLEMENTED)
-from qsiprep_analyses.tensors.utils import (DWI_ENTITIES, KWARGS_MAPPING,
-                                            TENSOR_DERIVED_ENTITIES,
-                                            TENSOR_DERIVED_METRICS)
+    INVALID_OUTPUT,
+    INVALID_PARTICIPANT,
+    TENSOR_RECONSTRUCTION_NOT_IMPLEMENTED,
+)
+from qsiprep_analyses.tensors.utils import (
+    DWI_ENTITIES,
+    KWARGS_MAPPING,
+    TENSOR_DERIVED_ENTITIES,
+    TENSOR_DERIVED_METRICS,
+)
 from qsiprep_analyses.utils.data_grabber import DataGrabber
-from qsiprep_analyses.utils.utils import (collect_subjects,
-                                          validate_instantiation)
+from qsiprep_analyses.utils.utils import (
+    collect_subjects,
+    validate_instantiation,
+)
 
 warnings.simplefilter("default", Warning)
 

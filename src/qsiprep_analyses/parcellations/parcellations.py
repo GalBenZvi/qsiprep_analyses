@@ -5,8 +5,10 @@ from pathlib import Path
 from typing import Union
 
 from qsiprep_analyses.utils.data_grabber import DataGrabber
-from qsiprep_analyses.utils.utils import (collect_subjects,
-                                          validate_instantiation)
+from qsiprep_analyses.utils.utils import (
+    collect_subjects,
+    validate_instantiation,
+)
 
 
 class NativeParcellation:
