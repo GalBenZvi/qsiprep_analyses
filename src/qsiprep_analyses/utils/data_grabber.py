@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Union
 
 import bids
-from bids.exceptions import ConfigError
 
 from qsiprep_analyses.data.bids import BIDS_CONFIGURATION_FILE
 

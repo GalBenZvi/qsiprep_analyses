@@ -4,16 +4,15 @@ Definition of the :class:`NativeParcellation` class.
 from pathlib import Path
 from typing import Tuple, Union
 
-import bids
-from brain_parts.parcellation.parcellations import (
-    Parcellation as parcellation_manager,
-)
-
 from qsiprep_analyses.utils.data_grabber import DataGrabber
 from qsiprep_analyses.utils.utils import (
     collect_subjects,
     validate_instantiation,
 )
+
+# from brain_parts.parcellation.parcellations import (
+#     Parcellation as parcellation_manager,
+# )
 
 
 class NativeParcellation:
@@ -96,7 +95,8 @@ class NativeParcellation:
         Returns
         -------
         dict
-            dictionary of paths to MNI-to-native and native-to-MNI transforms (.h5)
+            dictionary of paths to MNI-to-native
+            and native-to-MNI transforms (.h5)
         """
         transforms = {}
         for transform in self.TRANSFORMS:
@@ -123,7 +123,8 @@ class NativeParcellation:
         participant_label : str
             Specific participant's label to be queried
         reference_type : str, optional
-            Any default available reference types, either "anat" or "dwi", by default "anat"
+            Any default available reference types, either "anat" or "dwi",
+            by default "anat"
         space : str, optional
             Image's space, by default None
         session : str, optional
@@ -228,4 +229,3 @@ class NativeParcellation:
         transforms, anatomical_reference, gm_probseg = self.initiate_subject(
             participant_label
         )
-        
