@@ -19,7 +19,7 @@ from qsiprep_analyses.utils.utils import (
 )
 
 
-class NativeParcellation:
+class NativeRegistration:
     QUERIES = dict(
         mni2native={
             "from": "MNI152NLin2009cAsym",
@@ -308,6 +308,8 @@ class NativeParcellation:
         reference = self.get_reference(
             participant_label, "dwi", {"session": session}
         )
+        if not reference:
+            raise FileNotFoundError
         whole_brain, gm_cropped = [
             self.build_output_dictionary(
                 parcellation_scheme, reference, "dwi"
@@ -412,10 +414,13 @@ class NativeParcellation:
         else:
             participant_labels = list(sorted(self.subjects.keys()))
         for participant_label in tqdm(participant_labels):
+            # try:
             native_parcellations[participant_label] = self.run_single_subject(
                 parcellation_scheme,
                 participant_label,
                 probseg_threshold=probseg_threshold,
                 force=force,
             )
+            # except:
+            #     continue
         return native_parcellations
