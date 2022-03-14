@@ -2,8 +2,9 @@
 Definition of the :class:`NativeParcellation` class.
 """
 from pathlib import Path
-from typing import List, Union
+from typing import Callable, Union
 
+import numpy as np
 import pandas as pd
 from brain_parts.parcellation.parcellations import (
     Parcellation as parcellation_manager,
@@ -28,7 +29,10 @@ class NativeParcellation(QsiprepManager):
         self.tensor_estimation = TensorEstimation(base_dir, participant_labels)
 
     def generate_rows(
-        self, participant_label: str, session: Union[str, list]
+        self,
+        participant_label: str,
+        session: Union[str, list],
+        tensor_type: str,
     ) -> pd.MultiIndex:
         """
         Generate target DataFrame's multiindex for participant's rows.
@@ -53,39 +57,182 @@ class NativeParcellation(QsiprepManager):
                 sessions = session
         else:
             sessions = self.subjects.get(participant_label)
-        return pd.MultiIndex.from_product([[participant_label], sessions])
+        metrics = self.tensor_estimation.METRICS.get(tensor_type)
+        return pd.MultiIndex.from_product(
+            [[participant_label], sessions, metrics]
+        )
 
-    def generate_columns(
+    def build_output_name(
         self,
         parcellation_scheme: str,
+        parcellation_type: str,
         tensor_type: str,
-        index_columns: Union[str, list] = ["index"],
-        metrics: List[str] = None,
-    ) -> pd.MultiIndex:
-        """_summary_
+        parcellation_image: Union[Path, str],
+        measure: Callable = np.nanmean,
+    ) -> Path:
+        """
+        Reconstruct output "table"'s path
 
         Parameters
         ----------
         parcellation_scheme : str
-            _description_
+            Parcellation scheme to parcellate by
+        parcellation_type : str
+            Either "Whole_brain" or "gm_cropped"
         tensor_type : str
-            _description_
-        index_columns : Union[str, list], optional
-            _description_, by default ["index"]
-        metrics : List[str], optional
-            _description_, by default None
+            Tensor reconstruction method
+        parcellation_image : Union[Path, str]
+            Subject-specific parcellation image
+        measure : Callable, optional
+            Measure to parcellate by, by default np.nanmean
 
         Returns
         -------
-        pd.MultiIndex
-            _description_
+        Path
+            Path to output table.
         """
-        tensor_type = self.tensor_estimation.validate_tensor_type()
-        # parcels = self.parcellation_manager.parcellations.get(
-        #     parcellation_scheme
-        # ).get("parcels")
-        if metrics:
-            if isinstance(metrics, str):
-                metrics = [metrics]
-        else:
-            metrics = self.tensor_estimation.METRICS.get(tensor_type)
+        print(parcellation_scheme)
+        print(parcellation_type)
+        print(tensor_type)
+        print(parcellation_image)
+        measure = measure.__name__
+        print(measure)
+        acquisition = self.tensor_estimation.TENSOR_TYPES.get(tensor_type).get(
+            "acq"
+        )
+        entities = {
+            "atlas": parcellation_scheme,
+            "suffix": "dseg",
+            "acquisition": acquisition,
+            "extension": ".pickle",
+            "measure": measure,
+        }
+        parts = parcellation_type.split("_")
+        entities["desc"] = "".join([parts[0], parts[1].capitalize()])
+        return self.data_grabber.build_path(parcellation_image, entities)
+
+    def parcellate_single_tensor(
+        self,
+        parcellation_scheme: str,
+        tensor_type: str,
+        participant_label: str,
+        parcellation_type: str = "whole_brain",
+        session: Union[str, list] = None,
+        measure: Callable = np.nanmean,
+        force: bool = False,
+    ) -> pd.DataFrame:
+        """
+        Parcellate tensor-derived metrics
+
+        Parameters
+        ----------
+        parcellation_scheme : str
+            Parcellation scheme to parcellate by
+        tensor_type : str
+            Tensor reconstruction method
+        participant_label : str
+            Specific participant's label
+        parcellation_type : str, optional
+            Either "gm_cropped" or "whole_brain", by default "gm_cropped"
+        session : Union[str, list], optional
+            Specific session's label, by default None
+        measure : Callable, optional
+            Measure for parcellation, by default np.nanmean
+        force : bool, optional
+            Whether to re-write existing files, by default False
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame with (participant_label,session,tensor_type,metrics)
+            as index and (parcellation_scheme,label) as columns
+        """
+        rows = self.generate_rows(participant_label, session, tensor_type)
+        tensors = self.tensor_estimation.run_single_subject(
+            participant_label, session, tensor_type
+        )
+        parcellation_images = self.registration_manager.run_single_subject(
+            parcellation_scheme,
+            participant_label,
+            participant_label,
+            session,
+            force=force,
+        )
+        data = pd.DataFrame(index=rows)
+        for session in rows.levels[1]:
+            parcellation = parcellation_images.get(session).get(
+                parcellation_type
+            )
+            output_file = self.build_output_name(
+                parcellation_scheme,
+                parcellation_type,
+                tensor_type,
+                parcellation,
+                measure,
+            )
+            for metric, metric_image in (
+                tensors.get(session).get(tensor_type)[0].items()
+            ):
+                key = metric.split("_")[-1]
+                if output_file.exists() or force:
+                    tmp_data = pd.read_pickle(output_file)
+                else:
+                    tmp_data = self.parcellation_manager.parcellate_image(
+                        parcellation_scheme,
+                        parcellation,
+                        metric_image,
+                        key,
+                        measure=measure,
+                    )
+                    tmp_data.to_pickle(output_file)
+                data.loc[
+                    (participant_label, session, key),
+                    tmp_data.index,
+                ] = tmp_data.loc[tmp_data.index]
+        return data
+
+    def parcellate_single_subject(
+        self,
+        parcellation_scheme: str,
+        participant_label: str,
+        parcellation_type: str = "whole_brain",
+        session: Union[str, list] = None,
+        measure: Callable = np.nanmean,
+        force: bool = False,
+    ) -> pd.DataFrame:
+        data = pd.DataFrame()
+        for tensor_type in self.tensor_estimation.TENSOR_TYPES:
+            tensor_data = self.parcellate_single_tensor(
+                parcellation_scheme,
+                tensor_type,
+                participant_label,
+                parcellation_type,
+                session,
+                measure,
+                force,
+            )
+            tensor_data = pd.concat([tensor_data], keys=[tensor_type])
+            data = pd.concat([data, tensor_data])
+        return data
+
+    def parcellate_dataset(
+        self,
+        parcellation_scheme: str,
+        parcellation_type: str = "whole_brain",
+        measure: Callable = np.nanmean,
+        force: bool = False,
+    ):
+        data = pd.DataFrame()
+        for participant_label in self.subjects:
+            data = pd.concat(
+                [
+                    data,
+                    self.parcellate_single_subject(
+                        parcellation_scheme,
+                        participant_label,
+                        parcellation_type,
+                        measure=measure,
+                        force=force,
+                    ),
+                ]
+            )
