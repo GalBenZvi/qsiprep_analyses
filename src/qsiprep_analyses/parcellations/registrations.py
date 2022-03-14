@@ -9,17 +9,14 @@ from brain_parts.parcellation.parcellations import (
     Parcellation as parcellation_manager,
 )
 from nilearn.image.resampling import resample_to_img
+from nipype.interfaces.base import TraitError
 from tqdm import tqdm
 
+from qsiprep_analyses.manager import QsiprepManager
 from qsiprep_analyses.utils.data_grabber import DataGrabber
-from qsiprep_analyses.utils.utils import (
-    apply_bids_filters,
-    collect_subjects,
-    validate_instantiation,
-)
 
 
-class NativeRegistration:
+class NativeRegistration(QsiprepManager):
     QUERIES = dict(
         mni2native={
             "from": "MNI152NLin2009cAsym",
@@ -61,110 +58,12 @@ class NativeRegistration:
 
     def __init__(
         self,
-        base_dir: Path = None,
+        base_dir: Path,
         data_grabber: DataGrabber = None,
         participant_labels: Union[str, list] = None,
     ) -> None:
-        self.data_grabber = validate_instantiation(
-            self, base_dir, data_grabber
-        )
-        self.subjects = collect_subjects(self, participant_labels)
+        super().__init__(base_dir, data_grabber, participant_labels)
         self.parcellation_manager = parcellation_manager()
-
-    def get_transforms(
-        self, participant_label: str, bids_filters: dict = None
-    ) -> dict:
-        """
-        Locates subject-specific transformation warp from standard (MNI) space
-        to native.
-
-        Parameters
-        ----------
-        participant_label : str
-            Specific participant's label to be queried
-
-        Returns
-        -------
-        dict
-            dictionary of paths to MNI-to-native
-            and native-to-MNI transforms (.h5)
-        """
-        transforms = {}
-        for transform in self.TRANSFORMS:
-
-            query = dict(
-                subject=participant_label, **self.QUERIES.get(transform)
-            )
-            query = apply_bids_filters(query, bids_filters)
-            result = self.data_grabber.layout.get(**query)
-            transforms[transform] = Path(result[0].path) if result else None
-        return transforms
-
-    def get_reference(
-        self,
-        participant_label: str,
-        reference_type: str = "anat",
-        bids_filters: dict = None,
-    ) -> Path:
-        """
-        Locate a reference image
-
-        Parameters
-        ----------
-        participant_label : str
-            Specific participant's label to be queried
-        reference_type : str, optional
-            Any default available reference types, either "anat" or "dwi",
-            by default "anat"
-        space : str, optional
-            Image's space, by default None
-        session : str, optional
-            Specific session to be queried, by default None
-
-        Returns
-        -------
-        Path
-            Path to the result reference image.
-        """
-        query = dict(
-            subject=participant_label,
-            **self.QUERIES.get(f"{reference_type}_reference"),
-        )
-        query = apply_bids_filters(query, bids_filters)
-        result = self.data_grabber.layout.get(**query)
-        return Path(result[0].path) if result else None
-
-    def get_probseg(
-        self,
-        participant_label: str,
-        tissue_type: str = "GM",
-        bids_filters: dict = None,
-    ) -> Path:
-        """
-        Locates subject's tissue probability segmentations
-
-        Parameters
-        ----------
-        participant_label : str
-            Specific participant's label to be queried
-        tissue_type : str, optional
-            Tissue to be queried, by default "GM"
-        space : str, optional
-            Image's space, by default None
-
-        Returns
-        -------
-        Path
-            Path to tissue probability segmentations image
-        """
-        query = dict(
-            subject=participant_label,
-            label=tissue_type.upper(),
-            **self.QUERIES.get("probseg"),
-        )
-        query = apply_bids_filters(query, bids_filters)
-        result = self.data_grabber.layout.get(**query)
-        return Path(result[0].path) if result else None
 
     def initiate_subject(
         self, participant_label: str
@@ -183,7 +82,7 @@ class NativeRegistration:
             A tuple of required files for parcellation registration.
         """
         return [
-            grabber(participant_label)
+            grabber(participant_label, queries=self.QUERIES)
             for grabber in [
                 self.get_transforms,
                 self.get_reference,
@@ -306,10 +205,15 @@ class NativeRegistration:
             Whether to re-write existing files, by default False
         """
         reference = self.get_reference(
-            participant_label, "dwi", {"session": session}
+            participant_label,
+            "dwi",
+            {"session": session},
+            queries=self.QUERIES,
         )
         if not reference:
-            raise FileNotFoundError
+            raise FileNotFoundError(
+                f"Could not find reference file for subject {participant_label}!"  # noqa
+            )
         whole_brain, gm_cropped = [
             self.build_output_dictionary(
                 parcellation_scheme, reference, "dwi"
@@ -414,13 +318,15 @@ class NativeRegistration:
         else:
             participant_labels = list(sorted(self.subjects.keys()))
         for participant_label in tqdm(participant_labels):
-            # try:
-            native_parcellations[participant_label] = self.run_single_subject(
-                parcellation_scheme,
-                participant_label,
-                probseg_threshold=probseg_threshold,
-                force=force,
-            )
-            # except:
-            #     continue
+            try:
+                native_parcellations[
+                    participant_label
+                ] = self.run_single_subject(
+                    parcellation_scheme,
+                    participant_label,
+                    probseg_threshold=probseg_threshold,
+                    force=force,
+                )
+            except (FileNotFoundError, TraitError):
+                continue
         return native_parcellations

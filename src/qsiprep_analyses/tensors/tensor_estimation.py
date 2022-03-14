@@ -8,6 +8,7 @@ from typing import List, Tuple, Union
 import tqdm
 from dipy.workflows.reconst import ReconstDkiFlow, ReconstDtiFlow
 
+from qsiprep_analyses.manager import QsiprepManager
 from qsiprep_analyses.tensors.messages import (
     INVALID_OUTPUT,
     INVALID_PARTICIPANT,
@@ -20,15 +21,11 @@ from qsiprep_analyses.tensors.utils import (
     TENSOR_DERIVED_METRICS,
 )
 from qsiprep_analyses.utils.data_grabber import DataGrabber
-from qsiprep_analyses.utils.utils import (
-    collect_subjects,
-    validate_instantiation,
-)
 
 warnings.simplefilter("default", Warning)
 
 
-class TensorEstimation:
+class TensorEstimation(QsiprepManager):
     #: Templates
     DWI_QUERY_ENTITIES = DWI_ENTITIES.copy()
     TENSOR_ENTITIES = TENSOR_DERIVED_ENTITIES.copy()
@@ -50,55 +47,11 @@ class TensorEstimation:
 
     def __init__(
         self,
-        base_dir: Path = None,
+        base_dir: Path,
         data_grabber: DataGrabber = None,
         participant_labels: Union[str, list] = None,
     ) -> None:
-        self.data_grabber = validate_instantiation(
-            self, base_dir, data_grabber
-        )
-        self.subjects = collect_subjects(self, participant_labels)
-
-    def get_subject_dwi(
-        self, participant_label: str, session: str = None
-    ) -> List[dict]:
-        """
-        Locate subject's available preprocessed DWIs and their corresponding
-        gradients (.bvec and .bval).
-
-        Parameters
-        ----------
-        participant_label : str
-            Specific participants' labels to be queried
-        session : str, optional
-            Specific session's ID, by default None
-
-        Returns
-        -------
-        List[dict]
-            A list of dictionary with keys of ["dwi","bvec","bval"] for all
-            available DWIs
-        """
-        query = dict(
-            subject=participant_label,
-            **self.DWI_QUERY_ENTITIES,
-        )
-        if session:
-            query["session"] = session
-        dwi_files = self.data_grabber.layout.get(**query, return_type="file")
-        result = []
-        for dwi in dwi_files:
-            result.append(
-                {
-                    "dwi": dwi,
-                    "bval": self.data_grabber.layout.get_bval(dwi),
-                    "bvec": self.data_grabber.layout.get_bvec(dwi),
-                    "mask": self.data_grabber.build_path(
-                        dwi, {"desc": "brain", "suffix": "mask"}
-                    ),
-                }
-            )
-        return result
+        super().__init__(base_dir, data_grabber, participant_labels)
 
     def validate_tensor_type(self, tensor_type: str) -> None:
         """
@@ -347,7 +300,9 @@ class TensorEstimation:
             A dictionary with *tensor_types* as keys and a list of
             tensor-derived metrics as values
         """
-        dwis = self.get_subject_dwi(participant_label, session)
+        dwis = self.get_subject_dwi(
+            participant_label, session, queries=self.DWI_QUERY_ENTITIES
+        )
         result = {}
         for tensor_type in tensor_types:
             result[tensor_type] = []
