@@ -9,6 +9,7 @@ import pandas as pd
 from brain_parts.parcellation.parcellations import (
     Parcellation as parcellation_manager,
 )
+from tqdm import tqdm
 
 from qsiprep_analyses.manager import QsiprepManager
 from qsiprep_analyses.registrations.registrations import NativeRegistration
@@ -91,12 +92,7 @@ class NativeParcellation(QsiprepManager):
         Path
             Path to output table.
         """
-        print(parcellation_scheme)
-        print(parcellation_type)
-        print(tensor_type)
-        print(parcellation_image)
         measure = measure.__name__
-        print(measure)
         acquisition = self.tensor_estimation.TENSOR_TYPES.get(tensor_type).get(
             "acq"
         )
@@ -170,25 +166,25 @@ class NativeParcellation(QsiprepManager):
                 parcellation,
                 measure,
             )
+            if output_file.exists() and not force:
+                return pd.read_pickle(output_file)
             for metric, metric_image in (
                 tensors.get(session).get(tensor_type)[0].items()
             ):
                 key = metric.split("_")[-1]
-                if output_file.exists() or force:
-                    tmp_data = pd.read_pickle(output_file)
-                else:
-                    tmp_data = self.parcellation_manager.parcellate_image(
-                        parcellation_scheme,
-                        parcellation,
-                        metric_image,
-                        key,
-                        measure=measure,
-                    )
-                    tmp_data.to_pickle(output_file)
+
+                tmp_data = self.parcellation_manager.parcellate_image(
+                    parcellation_scheme,
+                    parcellation,
+                    metric_image,
+                    key,
+                    measure=measure,
+                )
                 data.loc[
                     (participant_label, session, key),
                     tmp_data.index,
                 ] = tmp_data.loc[tmp_data.index]
+            data.to_pickle(output_file)
         return data
 
     def parcellate_single_subject(
@@ -200,6 +196,29 @@ class NativeParcellation(QsiprepManager):
         measure: Callable = np.nanmean,
         force: bool = False,
     ) -> pd.DataFrame:
+        """
+        Perform all parcellation available for a single subject
+
+        Parameters
+        ----------
+        parcellation_scheme : str
+            Parcellation scheme to parcellate by
+        participant_label : str
+            A single participant's label
+        parcellation_type : str, optional
+            Either "whole_brain" or "gm_cropped", by default "whole_brain"
+        session : Union[str, list], optional
+            A specific session's label, by default None
+        measure : Callable, optional
+            Measure to parcellate by, by default np.nanmean
+        force : bool, optional
+            Whether to re-write existing files, by default False
+
+        Returns
+        -------
+        pd.DataFrame
+            All subject's availble parcellated data
+        """
         data = pd.DataFrame()
         for tensor_type in self.tensor_estimation.TENSOR_TYPES:
             tensor_data = self.parcellate_single_tensor(
@@ -223,7 +242,7 @@ class NativeParcellation(QsiprepManager):
         force: bool = False,
     ):
         data = pd.DataFrame()
-        for participant_label in self.subjects:
+        for participant_label in tqdm(self.subjects):
             data = pd.concat(
                 [
                     data,
@@ -236,3 +255,4 @@ class NativeParcellation(QsiprepManager):
                     ),
                 ]
             )
+        return data
