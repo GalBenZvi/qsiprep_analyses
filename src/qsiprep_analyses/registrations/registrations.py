@@ -1,5 +1,5 @@
 """
-Definition of the :class:`NativeParcellation` class.
+Definition of the :class:`NativeRegistration` class.
 """
 from pathlib import Path
 from typing import Tuple, Union
@@ -13,56 +13,32 @@ from nipype.interfaces.base import TraitError
 from tqdm import tqdm
 
 from qsiprep_analyses.manager import QsiprepManager
-from qsiprep_analyses.utils.data_grabber import DataGrabber
+from qsiprep_analyses.registrations.utils import (
+    DEFAULT_PARCELLATION_NAMING,
+    PROBSEG_THRESHOLD,
+    QUERIES,
+    TRANSFORMS,
+)
 
 
 class NativeRegistration(QsiprepManager):
-    QUERIES = dict(
-        mni2native={
-            "from": "MNI152NLin2009cAsym",
-            "to": "T1w",
-            "mode": "image",
-            "suffix": "xfm",
-        },
-        native2mni={
-            "from": "T1w",
-            "to": "MNI152NLin2009cAsym",
-            "mode": "image",
-            "suffix": "xfm",
-        },
-        anat_reference={
-            "desc": "preproc",
-            "suffix": "T1w",
-            "datatype": "anat",
-            "space": None,
-            "extension": ".nii.gz",
-        },
-        dwi_reference={
-            "desc": "preproc",
-            "datatype": "dwi",
-            "suffix": "dwi",
-            "space": "T1w",
-            "extension": ".nii.gz",
-        },
-        probseg={"suffix": "probseg"},
-    )
+    QUERIES = QUERIES
 
     #: Naming
-    DEFAULT_PARCELLATION_NAMING = dict(space="T1w", suffix="dseg", desc="")
+    DEFAULT_PARCELLATION_NAMING = DEFAULT_PARCELLATION_NAMING
 
     #: Types of transformations
-    TRANSFORMS = ["mni2native", "native2mni"]
+    TRANSFORMS = TRANSFORMS
 
     #: Default probability segmentations' threshold
-    PROBSEG_THRESHOLD = 0.01
+    PROBSEG_THRESHOLD = PROBSEG_THRESHOLD
 
     def __init__(
         self,
         base_dir: Path,
-        data_grabber: DataGrabber = None,
         participant_labels: Union[str, list] = None,
     ) -> None:
-        super().__init__(base_dir, data_grabber, participant_labels)
+        super().__init__(base_dir, participant_labels)
         self.parcellation_manager = parcellation_manager()
 
     def initiate_subject(

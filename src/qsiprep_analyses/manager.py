@@ -1,7 +1,6 @@
 from pathlib import Path
 from typing import List, Union
 
-from qsiprep_analyses.utils.data_grabber import DataGrabber
 from qsiprep_analyses.utils.utils import (
     apply_bids_filters,
     collect_subjects,
@@ -13,12 +12,9 @@ class QsiprepManager:
     def __init__(
         self,
         base_dir: Path,
-        data_grabber: DataGrabber = None,
         participant_labels: Union[str, list] = None,
     ) -> None:
-        self.data_grabber = validate_instantiation(
-            self, base_dir, data_grabber
-        )
+        self.data_grabber = validate_instantiation(self, base_dir)
         self.subjects = collect_subjects(self, participant_labels)
 
     def get_transforms(

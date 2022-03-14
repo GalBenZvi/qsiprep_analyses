@@ -20,9 +20,8 @@ from qsiprep_analyses.tensors.utils import (
     TENSOR_DERIVED_ENTITIES,
     TENSOR_DERIVED_METRICS,
 )
-from qsiprep_analyses.utils.data_grabber import DataGrabber
 
-warnings.simplefilter("default", Warning)
+# warnings.simplefilter("default", Warning)
 
 
 class TensorEstimation(QsiprepManager):
@@ -48,10 +47,9 @@ class TensorEstimation(QsiprepManager):
     def __init__(
         self,
         base_dir: Path,
-        data_grabber: DataGrabber = None,
         participant_labels: Union[str, list] = None,
     ) -> None:
-        super().__init__(base_dir, data_grabber, participant_labels)
+        super().__init__(base_dir, participant_labels)
 
     def validate_tensor_type(self, tensor_type: str) -> None:
         """
@@ -262,8 +260,10 @@ class TensorEstimation(QsiprepManager):
         wf = self.TENSOR_WORKFLOWS.get(tensor_type)
         outputs_exist = [Path(val).exists() for val in outputs.values()]
         if (not all(outputs_exist)) or (force):
-            runner = wf(force=force)
-            runner.run(**workflow_kwargs, **outputs)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore")
+                runner = wf(force=force)
+                runner.run(**workflow_kwargs, **outputs)
 
         return outputs
 
