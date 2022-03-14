@@ -2,420 +2,257 @@
 Definition of the :class:`NativeParcellation` class.
 """
 from pathlib import Path
-from typing import Tuple, Union
+from typing import Callable, Union
 
-import nibabel as nib
+import numpy as np
+import pandas as pd
 from brain_parts.parcellation.parcellations import (
     Parcellation as parcellation_manager,
 )
-from nilearn.image.resampling import resample_to_img
 from tqdm import tqdm
 
-from qsiprep_analyses.utils.data_grabber import DataGrabber
-from qsiprep_analyses.utils.utils import (
-    apply_bids_filters,
-    collect_subjects,
-    validate_instantiation,
-)
+from qsiprep_analyses.manager import QsiprepManager
+from qsiprep_analyses.registrations.registrations import NativeRegistration
+from qsiprep_analyses.tensors.tensor_estimation import TensorEstimation
 
 
-class NativeParcellation:
-    QUERIES = dict(
-        mni2native={
-            "from": "MNI152NLin2009cAsym",
-            "to": "T1w",
-            "mode": "image",
-            "suffix": "xfm",
-        },
-        native2mni={
-            "from": "T1w",
-            "to": "MNI152NLin2009cAsym",
-            "mode": "image",
-            "suffix": "xfm",
-        },
-        anat_reference={
-            "desc": "preproc",
-            "suffix": "T1w",
-            "datatype": "anat",
-            "space": None,
-            "extension": ".nii.gz",
-        },
-        dwi_reference={
-            "desc": "preproc",
-            "datatype": "dwi",
-            "suffix": "dwi",
-            "space": "T1w",
-            "extension": ".nii.gz",
-        },
-        probseg={"suffix": "probseg"},
-    )
-
-    #: Naming
-    DEFAULT_PARCELLATION_NAMING = dict(space="T1w", suffix="dseg", desc="")
-
-    #: Types of transformations
-    TRANSFORMS = ["mni2native", "native2mni"]
-
-    #: Default probability segmentations' threshold
-    PROBSEG_THRESHOLD = 0.01
-
+class NativeParcellation(QsiprepManager):
     def __init__(
         self,
-        base_dir: Path = None,
-        data_grabber: DataGrabber = None,
+        base_dir: Path,
         participant_labels: Union[str, list] = None,
     ) -> None:
-        self.data_grabber = validate_instantiation(
-            self, base_dir, data_grabber
+        super().__init__(base_dir, participant_labels)
+        self.registration_manager = NativeRegistration(
+            base_dir, participant_labels
         )
-        self.subjects = collect_subjects(self, participant_labels)
         self.parcellation_manager = parcellation_manager()
+        self.tensor_estimation = TensorEstimation(base_dir, participant_labels)
 
-    def get_transforms(
-        self, participant_label: str, bids_filters: dict = None
-    ) -> dict:
+    def generate_rows(
+        self,
+        participant_label: str,
+        session: Union[str, list],
+        tensor_type: str,
+    ) -> pd.MultiIndex:
         """
-        Locates subject-specific transformation warp from standard (MNI) space
-        to native.
+        Generate target DataFrame's multiindex for participant's rows.
 
         Parameters
         ----------
         participant_label : str
-            Specific participant's label to be queried
+            Specific participants' labels
+        session : Union[str, list]
+            Specific session(s)' labels
 
         Returns
         -------
-        dict
-            dictionary of paths to MNI-to-native
-            and native-to-MNI transforms (.h5)
+        pd.MultiIndex
+            A MultiIndex comprised of participant's label
+            and its corresponding sessions.
         """
-        transforms = {}
-        for transform in self.TRANSFORMS:
+        if session:
+            if isinstance(session, str):
+                sessions = [session]
+            elif isinstance(session, str):
+                sessions = session
+        else:
+            sessions = self.subjects.get(participant_label)
+        metrics = self.tensor_estimation.METRICS.get(tensor_type)
+        return pd.MultiIndex.from_product(
+            [[participant_label], sessions, metrics]
+        )
 
-            query = dict(
-                subject=participant_label, **self.QUERIES.get(transform)
-            )
-            query = apply_bids_filters(query, bids_filters)
-            result = self.data_grabber.layout.get(**query)
-            transforms[transform] = Path(result[0].path) if result else None
-        return transforms
-
-    def get_reference(
+    def build_output_name(
         self,
-        participant_label: str,
-        reference_type: str = "anat",
-        bids_filters: dict = None,
+        parcellation_scheme: str,
+        parcellation_type: str,
+        tensor_type: str,
+        parcellation_image: Union[Path, str],
+        measure: Callable = np.nanmean,
     ) -> Path:
         """
-        Locate a reference image
+        Reconstruct output "table"'s path
 
         Parameters
         ----------
-        participant_label : str
-            Specific participant's label to be queried
-        reference_type : str, optional
-            Any default available reference types, either "anat" or "dwi",
-            by default "anat"
-        space : str, optional
-            Image's space, by default None
-        session : str, optional
-            Specific session to be queried, by default None
+        parcellation_scheme : str
+            Parcellation scheme to parcellate by
+        parcellation_type : str
+            Either "Whole_brain" or "gm_cropped"
+        tensor_type : str
+            Tensor reconstruction method
+        parcellation_image : Union[Path, str]
+            Subject-specific parcellation image
+        measure : Callable, optional
+            Measure to parcellate by, by default np.nanmean
 
         Returns
         -------
         Path
-            Path to the result reference image.
+            Path to output table.
         """
-        query = dict(
-            subject=participant_label,
-            **self.QUERIES.get(f"{reference_type}_reference"),
+        measure = measure.__name__
+        acquisition = self.tensor_estimation.TENSOR_TYPES.get(tensor_type).get(
+            "acq"
         )
-        query = apply_bids_filters(query, bids_filters)
-        result = self.data_grabber.layout.get(**query)
-        return Path(result[0].path) if result else None
-
-    def get_probseg(
-        self,
-        participant_label: str,
-        tissue_type: str = "GM",
-        bids_filters: dict = None,
-    ) -> Path:
-        """
-        Locates subject's tissue probability segmentations
-
-        Parameters
-        ----------
-        participant_label : str
-            Specific participant's label to be queried
-        tissue_type : str, optional
-            Tissue to be queried, by default "GM"
-        space : str, optional
-            Image's space, by default None
-
-        Returns
-        -------
-        Path
-            Path to tissue probability segmentations image
-        """
-        query = dict(
-            subject=participant_label,
-            label=tissue_type.upper(),
-            **self.QUERIES.get("probseg"),
-        )
-        query = apply_bids_filters(query, bids_filters)
-        result = self.data_grabber.layout.get(**query)
-        return Path(result[0].path) if result else None
-
-    def initiate_subject(
-        self, participant_label: str
-    ) -> Tuple[dict, Path, Path]:
-        """
-        Query initially-required patricipant's files
-
-        Parameters
-        ----------
-        participant_label : str
-            Specific participant's label to be queried
-
-        Returns
-        -------
-        Tuple[dict,Path,Path]
-            A tuple of required files for parcellation registration.
-        """
-        return [
-            grabber(participant_label)
-            for grabber in [
-                self.get_transforms,
-                self.get_reference,
-                self.get_probseg,
-            ]
-        ]
-
-    def build_output_dictionary(
-        self,
-        parcellation_scheme: str,
-        reference: Path,
-        reference_type: str,
-    ) -> dict:
-        """
-        Based on a *reference* image,
-        reconstruct output names for native parcellation naming.
-
-        Parameters
-        ----------
-        reference : Path
-            The reference image.
-        reference_type : str
-            The reference image type (either "anat" or "dwi")
-
-        Returns
-        -------
-        dict
-            A dictionary with keys of "whole-brain" and "gm-cropped" and their
-            corresponding paths
-        """
-        basic_query = dict(
-            atlas=parcellation_scheme,
-            resolution=reference_type,
-            **self.DEFAULT_PARCELLATION_NAMING.copy(),
-        )
-        outputs = dict()
-        for key, label in zip(["whole_brain", "gm_cropped"], ["", "GM"]):
-            query = basic_query.copy()
-            query["label"] = label
-            outputs[key] = self.data_grabber.build_path(reference, query)
-        return outputs
-
-    def register_to_anatomical(
-        self,
-        parcellation_scheme: str,
-        participant_label: str,
-        probseg_threshold: float = None,
-        force: bool = False,
-    ) -> dict:
-        """
-        Register a *parcellation scheme* from standard to native anatomical space. # noqa
-
-        Parameters
-        ----------
-        parcellation_scheme : str
-            A string representing existing key within *self.parcellation_manager.parcellations*.
-        participant_label : str
-            Specific participant's label
-        probseg_threshold : float, optional
-            Threshold for probability segmentation masking, by default None
-        force : bool, optional
-            Whether to re-write existing files, by default False
-
-        Returns
-        -------
-        dict
-            A dictionary with keys of "whole_brain" and "gm_cropped" native-spaced parcellation schemes.
-        """
-        transforms, reference, gm_probseg = self.initiate_subject(
-            participant_label
-        )
-        whole_brain, gm_cropped = [
-            self.build_output_dictionary(
-                parcellation_scheme, reference, "anat"
-            ).get(key)
-            for key in ["whole_brain", "gm_cropped"]
-        ]
-        self.parcellation_manager.register_parcellation_scheme(
-            parcellation_scheme,
-            participant_label,
-            reference,
-            transforms.get("mni2native"),
-            whole_brain,
-            force=force,
-        )
-        self.parcellation_manager.crop_to_probseg(
-            parcellation_scheme,
-            participant_label,
-            whole_brain,
-            gm_probseg,
-            gm_cropped,
-            masking_threshold=probseg_threshold or self.PROBSEG_THRESHOLD,
-            force=force,
-        )
-        return whole_brain, gm_cropped
-
-    def register_dwi(
-        self,
-        parcellation_scheme: str,
-        participant_label: str,
-        session: str,
-        anatomical_whole_brain: Path,
-        anatomical_gm_cropped: Path,
-        force: bool = False,
-    ):
-        """
-        Resample parcellation scheme from anatomical to DWI space.
-
-        Parameters
-        ----------
-        parcellation_scheme : str
-            A string representing existing key within *self.parcellation_manager.parcellations*. # noqa
-        participant_label : str
-            Specific participant's label
-        anatomical_whole_brain : Path
-            Participant's whole-brain parcellation scheme in anatomical space
-        anatomical_gm_cropped : Path
-            Participant's GM-cropped parcellation scheme in anatomical space
-        force : bool, optional
-            Whether to re-write existing files, by default False
-        """
-        reference = self.get_reference(
-            participant_label, "dwi", {"session": session}
-        )
-        whole_brain, gm_cropped = [
-            self.build_output_dictionary(
-                parcellation_scheme, reference, "dwi"
-            ).get(key)
-            for key in ["whole_brain", "gm_cropped"]
-        ]
-        for source, target in zip(
-            [anatomical_whole_brain, anatomical_gm_cropped],
-            [whole_brain, gm_cropped],
-        ):
-            if not target.exists() or force:
-                img = resample_to_img(
-                    str(source), str(reference), interpolation="nearest"
-                )
-                nib.save(img, target)
-
-        return whole_brain, gm_cropped
-
-    def run_single_subject(
-        self,
-        parcellation_scheme: str,
-        participant_label: str,
-        session: Union[str, list] = None,
-        probseg_threshold: float = None,
-        force: bool = False,
-    ) -> dict:
-        """
-
-
-        Parameters
-        ----------
-        parcellation_scheme : str
-            A string representing existing key within *self.parcellation_manager.parcellations*. # noqa
-        participant_label : str
-            Specific participant's label
-        session : Union[str, list], optional
-            Specific sessions available for *participant_label*, by default None # noqa
-        probseg_threshold : float, optional
-            Threshold for probability segmentation masking, by default None
-        force : bool, optional
-            Whether to re-write existing files, by default False
-
-        Returns
-        -------
-        dict
-            A dictionary with keys of "anat" and available or requested sessions,
-            and corresponding natice parcellations as keys.
-        """
-        outputs = {}
-        anat_whole_brain, anat_gm_cropped = self.register_to_anatomical(
-            parcellation_scheme, participant_label, probseg_threshold, force
-        )
-        outputs["anat"] = {
-            "whole_brain": anat_whole_brain,
-            "gm_cropped": anat_gm_cropped,
+        entities = {
+            "atlas": parcellation_scheme,
+            "suffix": "dseg",
+            "acquisition": acquisition,
+            "extension": ".pickle",
+            "measure": measure,
         }
-        sessions = self.subjects.get(participant_label) or session
-        if isinstance(sessions, str):
-            sessions = [sessions]
-        for session in sessions:
-            whole_brain, gm_cropped = self.register_dwi(
+        parts = parcellation_type.split("_")
+        entities["desc"] = "".join([parts[0], parts[1].capitalize()])
+        return self.data_grabber.build_path(parcellation_image, entities)
+
+    def parcellate_single_tensor(
+        self,
+        parcellation_scheme: str,
+        tensor_type: str,
+        participant_label: str,
+        parcellation_type: str = "whole_brain",
+        session: Union[str, list] = None,
+        measure: Callable = np.nanmean,
+        force: bool = False,
+    ) -> pd.DataFrame:
+        """
+        Parcellate tensor-derived metrics
+
+        Parameters
+        ----------
+        parcellation_scheme : str
+            Parcellation scheme to parcellate by
+        tensor_type : str
+            Tensor reconstruction method
+        participant_label : str
+            Specific participant's label
+        parcellation_type : str, optional
+            Either "gm_cropped" or "whole_brain", by default "gm_cropped"
+        session : Union[str, list], optional
+            Specific session's label, by default None
+        measure : Callable, optional
+            Measure for parcellation, by default np.nanmean
+        force : bool, optional
+            Whether to re-write existing files, by default False
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame with (participant_label,session,tensor_type,metrics)
+            as index and (parcellation_scheme,label) as columns
+        """
+        rows = self.generate_rows(participant_label, session, tensor_type)
+        tensors = self.tensor_estimation.run_single_subject(
+            participant_label, session, tensor_type
+        )
+        parcellation_images = self.registration_manager.run_single_subject(
+            parcellation_scheme,
+            participant_label,
+            participant_label,
+            session,
+            force=force,
+        )
+        data = pd.DataFrame(index=rows)
+        for session in rows.levels[1]:
+            parcellation = parcellation_images.get(session).get(
+                parcellation_type
+            )
+            output_file = self.build_output_name(
                 parcellation_scheme,
+                parcellation_type,
+                tensor_type,
+                parcellation,
+                measure,
+            )
+            if output_file.exists() and not force:
+                return pd.read_pickle(output_file)
+            for metric, metric_image in (
+                tensors.get(session).get(tensor_type)[0].items()
+            ):
+                key = metric.split("_")[-1]
+
+                tmp_data = self.parcellation_manager.parcellate_image(
+                    parcellation_scheme,
+                    parcellation,
+                    metric_image,
+                    key,
+                    measure=measure,
+                )
+                data.loc[
+                    (participant_label, session, key),
+                    tmp_data.index,
+                ] = tmp_data.loc[tmp_data.index]
+            data.to_pickle(output_file)
+        return data
+
+    def parcellate_single_subject(
+        self,
+        parcellation_scheme: str,
+        participant_label: str,
+        parcellation_type: str = "whole_brain",
+        session: Union[str, list] = None,
+        measure: Callable = np.nanmean,
+        force: bool = False,
+    ) -> pd.DataFrame:
+        """
+        Perform all parcellation available for a single subject
+
+        Parameters
+        ----------
+        parcellation_scheme : str
+            Parcellation scheme to parcellate by
+        participant_label : str
+            A single participant's label
+        parcellation_type : str, optional
+            Either "whole_brain" or "gm_cropped", by default "whole_brain"
+        session : Union[str, list], optional
+            A specific session's label, by default None
+        measure : Callable, optional
+            Measure to parcellate by, by default np.nanmean
+        force : bool, optional
+            Whether to re-write existing files, by default False
+
+        Returns
+        -------
+        pd.DataFrame
+            All subject's availble parcellated data
+        """
+        data = pd.DataFrame()
+        for tensor_type in self.tensor_estimation.TENSOR_TYPES:
+            tensor_data = self.parcellate_single_tensor(
+                parcellation_scheme,
+                tensor_type,
                 participant_label,
+                parcellation_type,
                 session,
-                anat_whole_brain,
-                anat_gm_cropped,
+                measure,
                 force,
             )
-            outputs[session] = {
-                "whole_brain": whole_brain,
-                "gm_cropped": gm_cropped,
-            }
-        return outputs
+            tensor_data = pd.concat([tensor_data], keys=[tensor_type])
+            data = pd.concat([data, tensor_data])
+        return data
 
-    def run_dataset(
+    def parcellate_dataset(
         self,
         parcellation_scheme: str,
-        participant_label: Union[str, list] = None,
-        probseg_threshold: float = None,
+        parcellation_type: str = "whole_brain",
+        measure: Callable = np.nanmean,
         force: bool = False,
     ):
-        """
-        Register *parcellation_scheme* to all available (or requested) subjects' native space.
-
-        Parameters
-        ----------
-        parcellation_scheme : str
-            A string representing existing key within *self.parcellation_manager.parcellations*. # noqa
-        participant_label : Union[str, list], optional
-            Specific subject/s within the dataset to run, by default None
-        probseg_threshold : float, optional
-            Threshold for probability segmentation masking, by default None
-        force : bool, optional
-            Whether to remove existing products and generate new ones, by default False # noqa
-        """
-        native_parcellations = {}
-        if participant_label:
-            if isinstance(participant_label, str):
-                participant_labels = [participant_label]
-            elif isinstance(participant_label, list):
-                participant_labels = participant_label
-        else:
-            participant_labels = list(sorted(self.subjects.keys()))
-        for participant_label in tqdm(participant_labels):
-            native_parcellations[participant_label] = self.run_single_subject(
-                parcellation_scheme,
-                participant_label,
-                probseg_threshold=probseg_threshold,
-                force=force,
+        data = pd.DataFrame()
+        for participant_label in tqdm(self.subjects):
+            data = pd.concat(
+                [
+                    data,
+                    self.parcellate_single_subject(
+                        parcellation_scheme,
+                        participant_label,
+                        parcellation_type,
+                        measure=measure,
+                        force=force,
+                    ),
+                ]
             )
-        return native_parcellations
+        return data
