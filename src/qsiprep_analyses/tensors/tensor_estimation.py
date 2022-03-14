@@ -21,8 +21,6 @@ from qsiprep_analyses.tensors.utils import (
     TENSOR_DERIVED_METRICS,
 )
 
-# warnings.simplefilter("default", Warning)
-
 
 class TensorEstimation(QsiprepManager):
     #: Templates
