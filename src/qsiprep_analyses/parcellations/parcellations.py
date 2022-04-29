@@ -1,6 +1,7 @@
 """
 Definition of the :class:`NativeParcellation` class.
 """
+import warnings
 from pathlib import Path
 from typing import Callable, Union
 
@@ -13,7 +14,7 @@ from tqdm import tqdm
 
 from qsiprep_analyses.manager import QsiprepManager
 from qsiprep_analyses.registrations.registrations import NativeRegistration
-from qsiprep_analyses.tensors.tensor_estimation import TensorEstimation
+from qsiprep_analyses.tensors.tensor_estimation_mrtrix import TensorEstimation
 
 
 class NativeParcellation(QsiprepManager):
@@ -221,17 +222,22 @@ class NativeParcellation(QsiprepManager):
         """
         data = pd.DataFrame()
         for tensor_type in self.tensor_estimation.TENSOR_TYPES:
-            tensor_data = self.parcellate_single_tensor(
-                parcellation_scheme,
-                tensor_type,
-                participant_label,
-                parcellation_type,
-                session,
-                measure,
-                force,
-            )
-            tensor_data = pd.concat([tensor_data], keys=[tensor_type])
-            data = pd.concat([data, tensor_data])
+            try:
+                tensor_data = self.parcellate_single_tensor(
+                    parcellation_scheme,
+                    tensor_type,
+                    participant_label,
+                    parcellation_type,
+                    session,
+                    measure,
+                    force,
+                )
+                tensor_data = pd.concat([tensor_data], keys=[tensor_type])
+                data = pd.concat([data, tensor_data])
+            except (TypeError, FileNotFoundError):
+                warnings.warn(
+                    f"Encountered an error when trying to parcellate subject {participant_label}'s data..."  # noqa
+                )
         return data
 
     def parcellate_dataset(
@@ -255,4 +261,5 @@ class NativeParcellation(QsiprepManager):
                     ),
                 ]
             )
+
         return data
