@@ -1,0 +1,49 @@
+TENSOR_DERIVED_ENTITIES = dict(suffix="dwiref", resolution="dwi")
+TENSOR_DERIVED_METRICS = dict(
+    diffusion_tensor=dict(
+        fa="fa",
+        adc="md",
+        ad="ad",
+        rd="rd",
+        cl="cl",
+        cs="cs",
+        cp="cp",
+        value="evec",
+        vector="eval",
+    ),
+    restore_tensor=[
+        "fa",
+        "ga",
+        "rgb",
+        "md",
+        "ad",
+        "rd",
+        "mode",
+        "evec",
+        "eval",
+        "tensor",
+    ],
+    diffusion_kurtosis=[
+        "fa",
+        "ga",
+        "rgb",
+        "md",
+        "ad",
+        "rd",
+        "mode",
+        "evec",
+        "eval",
+        "mk",
+        "ak",
+        "rk",
+        "dt_tensor",
+        "dk_tensor",
+    ],
+)
+
+KWARGS_MAPPING = dict(
+    coreg_dwi_image="input_files",
+    coreg_dwi_bval="bvalues_files",
+    coreg_dwi_bvec="bvectors_files",
+    coreg_dwi_brain_mask="mask_files",
+)

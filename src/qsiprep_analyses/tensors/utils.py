@@ -1,4 +1,40 @@
-DWI_ENTITIES = dict(suffix="dwi", extension=".nii.gz", space="T1w")
+from pathlib import Path
+from typing import Union
+
+from bids.layout import parse_file_entities
+from bids.layout.writing import build_path
+
+from qsiprep_analyses.data.bids import DEFAULT_PATTERNS
+
+
+def build_relative_path(
+    source: Union[Path, str],
+    replacements: dict,
+    path_patterns: list = DEFAULT_PATTERNS,
+) -> Path:
+    """
+    Build a BIDS-compatible path according to source file/entities.
+
+    Parameters
+    ----------
+    source : Union[Path,str]
+        Either a source file (to be parsed to entities) or its BIDS
+    replacements : dict
+        A dictionary with keys as entities and values as
+
+    Returns
+    -------
+    Path
+        Path to BIDS-compatible path
+    """
+    source_entities = parse_file_entities(source)
+
+    for key, value in replacements.items():
+        source_entities[key] = value
+    return build_path(
+        source_entities, path_patterns=path_patterns, strict=False
+    )
+
 
 TENSOR_DERIVED_ENTITIES = dict(suffix="dwiref", resolution="dwi")
 
@@ -45,11 +81,10 @@ TENSOR_DERIVED_METRICS = dict(
 )
 
 KWARGS_MAPPING = dict(
-    dwi="input_files",
-    bval="bvalues_files",
-    bvec="bvectors_files",
-    # mask="mask_files",
-    # out_metrics="save_metrics",
+    coreg_dwi_image="input_files",
+    coreg_dwi_bval="bvalues_files",
+    coreg_dwi_bvec="bvectors_files",
+    coreg_dwi_brain_mask="mask_files",
 )
 
 TENSOR_FITTING_CMD = "dwi2tensor {input_files} -fslgrad {bvectors_files} {bvalues_files} - | tensor2metric - -force"
