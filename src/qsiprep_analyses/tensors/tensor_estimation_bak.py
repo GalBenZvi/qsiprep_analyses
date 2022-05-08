@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import List, Tuple, Union
 
 import tqdm
-from analyses_utils.entities.derivatives.qsiprep import QsiprepDerivatives
 from dipy.workflows.reconst import ReconstDkiFlow, ReconstDtiFlow
 
 from qsiprep_analyses.qsiprep_analysis import QsiprepAnalysis
@@ -45,14 +44,10 @@ class TensorEstimation(QsiprepAnalysis):
 
     def __init__(
         self,
-        derivatives: QsiprepDerivatives = None,
-        base_dir: Union[Path, str] = None,
-        participant_label: str = None,
-        sessions_base: str = None,
-    ):
-        super().__init__(
-            derivatives, base_dir, participant_label, sessions_base
-        )
+        base_dir: Path,
+        participant_labels: Union[str, list] = None,
+    ) -> None:
+        super().__init__(base_dir, participant_labels)
 
     def validate_tensor_type(self, tensor_type: str) -> None:
         """
