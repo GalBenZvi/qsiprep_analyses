@@ -130,26 +130,107 @@ class TensorEstimation(QsiprepAnalysis):
         """
         outputs = outputs or self.METRICS.get(tensor_type)
         target = {}
+        entities = {
+            "acquisition": self.TENSOR_TYPES.get(tensor_type).get("acq"),
+            **self.TENSOR_ENTITIES,
+        }
         for output in outputs:
             if self.validate_requested_output(tensor_type, output):
-                output_parts = output.split("_")
-                if len(output_parts) > 1:
-                    output_desc = "".join(
-                        [output_parts[0], output_parts[1].capitalize()]
-                    )
-                else:
-                    output_desc = output
-                target[
-                    f"out_{output}"
-                ] = self.derivatives.path.parent / build_relative_path(
-                    source,
-                    {
-                        "acquisition": self.TENSOR_TYPES.get(tensor_type).get(
-                            "acq"
-                        ),
-                        "desc": output_desc,
-                        **self.TENSOR_ENTITIES,
-                    },
+                target[f"out_{output}"] = _gen_output_name(
+                    output=output,
+                    parent=self.derivatives.path.parent,
+                    source=source,
+                    entities=entities,
                 )
-
         return target
+
+    def get_inputs(self, session: str):
+        """
+        Returns the inputs for the tensor estimation workflow.
+
+        Parameters
+        ----------
+        session : str
+            The session to be analyzed.
+
+        Returns
+        -------
+        dict
+            A dictionary with keys of required inputs and their
+            corresponding paths
+        """
+        inputs = {}
+        for key, val in self.TENSOR_FITTING_KWARGS.items():
+            inputs[val] = str(self.get_derivative(session, key))
+        return inputs
+
+    def run_tensor_workflow(
+        self, session: str, tensor_type: str, outputs: List[str] = None
+    ) -> None:
+        """
+        Run a tensor-fitting workflow for a given *tensor_type*.
+
+        Parameters
+        ----------
+        session : str
+            The session to run the workflow for
+        tensor_type : str
+            The tensor estimation method (either "dt" or "dk")
+        outputs : List[str], optional
+            Requested tensor-derived outputs, by default All available
+        """
+        inputs = self.get_inputs(session)
+        outputs = self.build_output_dictionary(
+            inputs.get("input_files"), tensor_type, outputs
+        )
+        if self.validate_tensor_type(tensor_type):
+            workflow = self.TENSOR_WORKFLOWS.get(tensor_type)()
+            workflow.run(**inputs, **outputs)
+        return outputs
+
+    def run(
+        self,
+        session: str = None,
+        tensor_type: Union[str, list] = None,
+        force: bool = True,
+    ):
+        """
+        Run the tensor estimation workflow.
+
+        Parameters
+        ----------
+        session : str, optional
+            Specific session to run, by default All available
+        tensor_type : str, optional
+            The tensor estimation method (either "dt" or "dk") , by default None
+        force : bool, optional
+             , by default True
+        """
+        if isinstance(tensor_type, str):
+            tensor_type = [tensor_type]
+        tensor_types = tensor_type if tensor_type else self.TENSOR_TYPES.keys()
+        if isinstance(session, str):
+            session = [session]
+        sessions = session if session else self.derivatives.sessions
+        # for tensor_type in tensor_types:
+        # self.run_tensor_workflow(
+
+
+def _gen_output_name(
+    output: str,
+    parent: Union[str, Path],
+    source: Union[str, Path],
+    entities: dict,
+):
+    output_parts = output.split("_")
+    if len(output_parts) > 1:
+        output_desc = "".join([output_parts[0], output_parts[1].capitalize()])
+    else:
+        output_desc = output
+    return str(
+        Path(parent)
+        / build_relative_path(
+            source,
+            {"desc": output_desc, **entities},
+        )
+    )
