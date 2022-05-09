@@ -3,17 +3,16 @@ Definition of the :class:`TensorEstimation` class.
 """
 import warnings
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import Callable, List, Union
 
-import tqdm
 from analyses_utils.entities.derivatives.qsiprep import QsiprepDerivatives
 from dipy.workflows.reconst import ReconstDkiFlow, ReconstDtiFlow
 
 from qsiprep_analyses.data.bids import build_relative_path
 from qsiprep_analyses.qsiprep_analysis import QsiprepAnalysis
-from qsiprep_analyses.tensors.messages import (
+from qsiprep_analyses.tensors.utils.functions import estimate_sigma
+from qsiprep_analyses.tensors.utils.messages import (
     INVALID_OUTPUT,
-    INVALID_PARTICIPANT,
     TENSOR_RECONSTRUCTION_NOT_IMPLEMENTED,
 )
 from qsiprep_analyses.tensors.utils.templates import (
@@ -37,9 +36,12 @@ class TensorEstimation(QsiprepAnalysis):
     }
     #: Tensor types
     TENSOR_TYPES = dict(
-        diffusion_tensor={"acq": "dt", "fit_method": "WLS"},
-        diffusion_kurtosis={"acq": "dk", "fit_method": "WLS"},
-        restore_tensor={"acq": "rt", "fit_method": "restore"},
+        diffusion_tensor={"acq": "dt", "kwargs": {"fit_method": "WLS"}},
+        diffusion_kurtosis={"acq": "dk", "kwargs": {"fit_method": "WLS"}},
+        restore_tensor={
+            "acq": "rt",
+            "kwargs": {"fit_method": "restore", "sigma": estimate_sigma},
+        },
     )
 
     def __init__(
@@ -53,7 +55,32 @@ class TensorEstimation(QsiprepAnalysis):
             derivatives, base_dir, participant_label, sessions_base
         )
 
-    def validate_tensor_type(self, tensor_type: str) -> None:
+    def listify_tensor_type(self, tensor_types: Union[str, list]) -> List[str]:
+        """
+        Listifies *tensor_type* if it is not already a list.
+
+        Parameters
+        ----------
+        tensor_types : Union[str,list]
+            The tensor estimation method (either "dt", "rt" or "dk")
+
+        Returns
+        -------
+        List[str]
+            A list of tensor estimation methods
+        """
+        if isinstance(tensor_types, str):
+            tensor_types = [tensor_types]
+        if isinstance(tensor_types, list) and all(
+            [self.validate_tensor_type(x, strict=False) for x in tensor_types]
+        ):
+            return tensor_types
+        else:
+            return self.TENSOR_TYPES.keys()
+
+    def validate_tensor_type(
+        self, tensor_type: str, strict: bool = True
+    ) -> None:
         """
         Validates *tensor_type* as an implemented tensor estimation protocol.
 
@@ -69,12 +96,15 @@ class TensorEstimation(QsiprepAnalysis):
             tensor-estimation protocol
         """
         if tensor_type not in self.TENSOR_TYPES:
-            raise NotImplementedError(
-                TENSOR_RECONSTRUCTION_NOT_IMPLEMENTED.format(
-                    tensor_type=tensor_type
+            if strict:
+                raise NotImplementedError(
+                    TENSOR_RECONSTRUCTION_NOT_IMPLEMENTED.format(
+                        tensor_type=tensor_type
+                    )
                 )
-            )
-        return self.TENSOR_TYPES.get(tensor_type)
+            else:
+                return False
+        return True
 
     def validate_requested_output(self, tensor_type: str, output: str) -> bool:
         """
@@ -165,7 +195,11 @@ class TensorEstimation(QsiprepAnalysis):
         return inputs
 
     def run_tensor_workflow(
-        self, session: str, tensor_type: str, outputs: List[str] = None
+        self,
+        session: str,
+        tensor_type: str,
+        outputs: List[str] = None,
+        force: bool = False,
     ) -> None:
         """
         Run a tensor-fitting workflow for a given *tensor_type*.
@@ -183,15 +217,47 @@ class TensorEstimation(QsiprepAnalysis):
         outputs = self.build_output_dictionary(
             inputs.get("input_files"), tensor_type, outputs
         )
+        output_exists = [Path(val).exists() for val in outputs.values()]
+        if all(output_exists) and not force:
+            return outputs
         if self.validate_tensor_type(tensor_type):
             workflow = self.TENSOR_WORKFLOWS.get(tensor_type)()
-            workflow.run(**inputs, **outputs)
+            workflow.run(
+                **inputs, **outputs, **self.get_kwargs(inputs, tensor_type)
+            )
         return outputs
+
+    def get_kwargs(self, inputs: dict, tensor_type: str) -> dict:
+        """
+        Returns the kwargs for the tensor estimation workflow.
+
+        Parameters
+        ----------
+        inputs : dict
+            The inputs for the tensor estimation workflow.
+        tensor_type : str
+            The tensor estimation method (either "dt", "rt or "dk")
+
+        Returns
+        -------
+        dict
+            A dictionary with keys of required kwargs and their
+            corresponding values
+        """
+        kwargs = {}
+        for key, value in (
+            self.TENSOR_TYPES.get(tensor_type).get("kwargs").items()
+        ):
+            if isinstance(value, Callable):
+                kwargs[key] = value(inputs)
+            else:
+                kwargs[key] = value
+        return kwargs
 
     def run(
         self,
-        session: str = None,
-        tensor_type: Union[str, list] = None,
+        sessions: str = None,
+        tensor_types: Union[str, list] = None,
         force: bool = True,
     ):
         """
@@ -202,18 +268,20 @@ class TensorEstimation(QsiprepAnalysis):
         session : str, optional
             Specific session to run, by default All available
         tensor_type : str, optional
-            The tensor estimation method (either "dt" or "dk") , by default None
+            The tensor estimation method (either "dt" or "dk") ,by default None
         force : bool, optional
              , by default True
         """
-        if isinstance(tensor_type, str):
-            tensor_type = [tensor_type]
-        tensor_types = tensor_type if tensor_type else self.TENSOR_TYPES.keys()
-        if isinstance(session, str):
-            session = [session]
-        sessions = session if session else self.derivatives.sessions
-        # for tensor_type in tensor_types:
-        # self.run_tensor_workflow(
+        tensor_types = self.listify_tensor_type(tensor_types)
+        sessions = self.listify_sessions(sessions)
+        output = {}
+        for session in sessions:
+            output[session] = {}
+            for tensor_type in tensor_types:
+                output[session][tensor_type] = self.run_tensor_workflow(
+                    session, tensor_type, force=force
+                )
+        return output
 
 
 def _gen_output_name(

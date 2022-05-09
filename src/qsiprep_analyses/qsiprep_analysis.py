@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Union
+from typing import List, Union
 
 from analyses_utils.entities.analysis.analysis import Analysis
 from analyses_utils.entities.derivatives.qsiprep import QsiprepDerivatives
@@ -34,3 +34,26 @@ class QsiprepAnalysis(Analysis):
         self.derivatives = validate_instantiation(
             derivatives, base_dir, sessions_base, participant_label
         )
+
+    def listify_sessions(self, sessions: Union[str, list]) -> List[str]:
+        """
+        Listifies *sessions* if it is not already a list.
+
+        Parameters
+        ----------
+        sessions : Union[str,list]
+            The sessions to be analyzed.
+
+        Returns
+        -------
+        List[str]
+            A list of sessions
+        """
+        if isinstance(sessions, str):
+            sessions = [sessions]
+        if isinstance(sessions, list) and all(
+            [session in self.derivatives.sessions for session in sessions]
+        ):
+            return sessions
+        else:
+            return self.derivatives.sessions
