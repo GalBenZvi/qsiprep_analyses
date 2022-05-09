@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import List, Union
 
+from analyses_utils.entities import Analysis
+
 from qsiprep_analyses.utils.utils import (
     apply_bids_filters,
     collect_subjects,
@@ -8,7 +10,7 @@ from qsiprep_analyses.utils.utils import (
 )
 
 
-class QsiprepManager:
+class QsiprepManager(Analysis):
     def __init__(
         self,
         base_dir: Path,

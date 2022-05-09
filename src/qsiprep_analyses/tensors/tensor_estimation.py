@@ -3,28 +3,27 @@ Definition of the :class:`TensorEstimation` class.
 """
 import warnings
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import Callable, List, Union
 
-import tqdm
+from analyses_utils.entities.derivatives.qsiprep import QsiprepDerivatives
 from dipy.workflows.reconst import ReconstDkiFlow, ReconstDtiFlow
 
-from qsiprep_analyses.manager import QsiprepManager
-from qsiprep_analyses.tensors.messages import (
+from qsiprep_analyses.data.bids import build_relative_path
+from qsiprep_analyses.qsiprep_analysis import QsiprepAnalysis
+from qsiprep_analyses.tensors.utils.functions import estimate_sigma
+from qsiprep_analyses.tensors.utils.messages import (
     INVALID_OUTPUT,
-    INVALID_PARTICIPANT,
     TENSOR_RECONSTRUCTION_NOT_IMPLEMENTED,
 )
-from qsiprep_analyses.tensors.utils import (
-    DWI_ENTITIES,
+from qsiprep_analyses.tensors.utils.templates import (
     KWARGS_MAPPING,
     TENSOR_DERIVED_ENTITIES,
     TENSOR_DERIVED_METRICS,
 )
 
 
-class TensorEstimation(QsiprepManager):
+class TensorEstimation(QsiprepAnalysis):
     #: Templates
-    DWI_QUERY_ENTITIES = DWI_ENTITIES.copy()
     TENSOR_ENTITIES = TENSOR_DERIVED_ENTITIES.copy()
     METRICS = TENSOR_DERIVED_METRICS.copy()
 
@@ -37,19 +36,51 @@ class TensorEstimation(QsiprepManager):
     }
     #: Tensor types
     TENSOR_TYPES = dict(
-        diffusion_tensor={"acq": "dt", "fit_method": "WLS"},
-        diffusion_kurtosis={"acq": "dk", "fit_method": "WLS"},
-        restore_tensor={"acq": "rt", "fit_method": "restore"},
+        diffusion_tensor={"acq": "dt", "kwargs": {"fit_method": "WLS"}},
+        diffusion_kurtosis={"acq": "dk", "kwargs": {"fit_method": "WLS"}},
+        restore_tensor={
+            "acq": "rt",
+            "kwargs": {"fit_method": "restore", "sigma": estimate_sigma},
+        },
     )
 
     def __init__(
         self,
-        base_dir: Path,
-        participant_labels: Union[str, list] = None,
-    ) -> None:
-        super().__init__(base_dir, participant_labels)
+        derivatives: QsiprepDerivatives = None,
+        base_dir: Union[Path, str] = None,
+        participant_label: str = None,
+        sessions_base: str = None,
+    ):
+        super().__init__(
+            derivatives, base_dir, participant_label, sessions_base
+        )
 
-    def validate_tensor_type(self, tensor_type: str) -> None:
+    def listify_tensor_type(self, tensor_types: Union[str, list]) -> List[str]:
+        """
+        Listifies *tensor_type* if it is not already a list.
+
+        Parameters
+        ----------
+        tensor_types : Union[str,list]
+            The tensor estimation method (either "dt", "rt" or "dk")
+
+        Returns
+        -------
+        List[str]
+            A list of tensor estimation methods
+        """
+        if isinstance(tensor_types, str):
+            tensor_types = [tensor_types]
+        if isinstance(tensor_types, list) and all(
+            [self.validate_tensor_type(x, strict=False) for x in tensor_types]
+        ):
+            return tensor_types
+        else:
+            return self.TENSOR_TYPES.keys()
+
+    def validate_tensor_type(
+        self, tensor_type: str, strict: bool = True
+    ) -> None:
         """
         Validates *tensor_type* as an implemented tensor estimation protocol.
 
@@ -65,12 +96,15 @@ class TensorEstimation(QsiprepManager):
             tensor-estimation protocol
         """
         if tensor_type not in self.TENSOR_TYPES:
-            raise NotImplementedError(
-                TENSOR_RECONSTRUCTION_NOT_IMPLEMENTED.format(
-                    tensor_type=tensor_type
+            if strict:
+                raise NotImplementedError(
+                    TENSOR_RECONSTRUCTION_NOT_IMPLEMENTED.format(
+                        tensor_type=tensor_type
+                    )
                 )
-            )
-        return self.TENSOR_TYPES.get(tensor_type)
+            else:
+                return False
+        return True
 
     def validate_requested_output(self, tensor_type: str, output: str) -> bool:
         """
@@ -126,277 +160,145 @@ class TensorEstimation(QsiprepManager):
         """
         outputs = outputs or self.METRICS.get(tensor_type)
         target = {}
+        entities = {
+            "acquisition": self.TENSOR_TYPES.get(tensor_type).get("acq"),
+            **self.TENSOR_ENTITIES,
+        }
         for output in outputs:
             if self.validate_requested_output(tensor_type, output):
-                output_parts = output.split("_")
-                if len(output_parts) > 1:
-                    output_desc = "".join(
-                        [output_parts[0], output_parts[1].capitalize()]
-                    )
-                else:
-                    output_desc = output
-                target[f"out_{output}"] = str(
-                    self.data_grabber.build_path(
-                        source,
-                        {
-                            "acquisition": self.TENSOR_TYPES.get(
-                                tensor_type
-                            ).get("acq"),
-                            "desc": output_desc,
-                            **self.TENSOR_ENTITIES,
-                        },
-                    )
+                target[f"out_{output}"] = _gen_output_name(
+                    output=output,
+                    parent=self.derivatives.path.parent,
+                    source=source,
+                    entities=entities,
                 )
-
         return target
 
-    def map_kwargs_to_workflow(self, inputs: dict) -> dict:
+    def get_inputs(self, session: str):
         """
-        Maps inputs' dictionary's keys to their corresponding kwargs in
-        relevant Workflows.
+        Returns the inputs for the tensor estimation workflow.
 
         Parameters
         ----------
-        inputs : dict
-            A dictionary with keys of inputs and values of their corresponding
-            paths
+        session : str
+            The session to be analyzed.
 
         Returns
         -------
         dict
-            The same dictionary with keys that match workflows' kwargs
+            A dictionary with keys of required inputs and their
+            corresponding paths
         """
-        workflow_kwargs = {}
-        for key, val in inputs.items():
-            kwarg = self.TENSOR_FITTING_KWARGS.get(key) or key
-            workflow_kwargs[kwarg] = str(val)
-        return workflow_kwargs
+        inputs = {}
+        for key, val in self.TENSOR_FITTING_KWARGS.items():
+            inputs[val] = str(self.get_derivative(session, key))
+        return inputs
 
-    def validate_single_subject_run(
+    def run_tensor_workflow(
         self,
-        participant_label: str,
-        session: Union[List, str] = None,
-        tensor_type: Union[List, str] = None,
-        out_metrics: Union[List, str] = None,
-    ) -> Tuple[List, List, List]:
-        """
-        Validates the requested single-subject run's properties
-
-        Parameters
-        ----------
-        participant_label : str
-            Specific participants' labels to be queried
-        session : Union[List, str], optional
-            Specific session's ID, by default None
-        tensor_type : Union[List, str], optional
-            The tensor estimation method (either "dt" or "dk")
-        out_metrics : Union[List, str], optional
-            Requested tensor-derived outputs, by default All available, by
-            default None
-
-        Returns
-        -------
-        Tuple[List, List, List]
-            Validated tensor estimation protocol, sessions and output metrics
-        """
-        if participant_label not in self.subjects:
-            raise ValueError(
-                INVALID_PARTICIPANT.format(
-                    base_dir=self.data_grabber.base_dir,
-                    participant_label=participant_label,
-                )
-            )
-        tensor_types = tensor_type or list(self.TENSOR_TYPES.keys())
-        if isinstance(tensor_type, str):
-            tensor_types = [tensor_type]
-        sessions = session or self.subjects.get(participant_label)
-        if isinstance(sessions, str):
-            sessions = [sessions]
-        if isinstance(out_metrics, str):
-            out_metrics = [out_metrics]
-        return tensor_types, sessions, out_metrics
-
-    def run_single_input(
-        self,
-        inputs: dict,
+        session: str,
         tensor_type: str,
-        out_metrics: list = None,
+        outputs: List[str] = None,
         force: bool = False,
-    ) -> dict:
+    ) -> None:
         """
-        Runs a single input set (DWI and its corresponding files)
+        Run a tensor-fitting workflow for a given *tensor_type*.
 
         Parameters
         ----------
-        inputs : dict
-            A dictionary with keys of ["dwi","bval","bvec","mask"]
+        session : str
+            The session to run the workflow for
         tensor_type : str
             The tensor estimation method (either "dt" or "dk")
-        out_metrics : list
-            Requested tensor-derived outputs, by default All available, by
-            default None
-        force : bool
-            Whether to force the creation of outputs (rather than keeping
-            pre-existing ones), by default False
-
-        Returns
-        -------
-        dict
-            Dictionary with requested outputs as keys and their corresponding
-            generated files' paths as values.
+        outputs : List[str], optional
+            Requested tensor-derived outputs, by default All available
         """
-
-        tensor_kwargs = self.validate_tensor_type(tensor_type)
+        inputs = self.get_inputs(session)
         outputs = self.build_output_dictionary(
-            inputs.get("dwi"),
-            tensor_type,
-            out_metrics,
+            inputs.get("input_files"), tensor_type, outputs
         )
-        workflow_kwargs = self.map_kwargs_to_workflow(inputs)
-        if "fit_method" in tensor_kwargs:
-            workflow_kwargs["fit_method"] = tensor_kwargs.get("fit_method")
-        wf = self.TENSOR_WORKFLOWS.get(tensor_type)
-        outputs_exist = [Path(val).exists() for val in outputs.values()]
-        if (not all(outputs_exist)) or (force):
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore")
-                runner = wf(force=force)
-                runner.run(**workflow_kwargs, **outputs)
-
+        output_exists = [Path(val).exists() for val in outputs.values()]
+        if all(output_exists) and not force:
+            return outputs
+        if self.validate_tensor_type(tensor_type):
+            workflow = self.TENSOR_WORKFLOWS.get(tensor_type)()
+            workflow.run(
+                **inputs, **outputs, **self.get_kwargs(inputs, tensor_type)
+            )
         return outputs
 
-    def run_single_session(
-        self,
-        participant_label: str,
-        session: str,
-        tensor_types: list,
-        out_metrics: list = None,
-        force: bool = False,
-    ) -> dict:
+    def get_kwargs(self, inputs: dict, tensor_type: str) -> dict:
         """
-        Locates session-specific DWI-related files and estimates their
-        tensor-derived metrics.
+        Returns the kwargs for the tensor estimation workflow.
 
         Parameters
         ----------
-        participant_label : str
-            Specific participants' labels to be analyzed
-        session : str
-            Specific session's ID
-        tensor_types : list
-            The tensor estimation method(s) (either "dt" or "dk")
-        out_metrics : list
-            Requested tensor-derived outputs, by default All available, by
-            default None
-        force : bool
-            Whether to force the creation of outputs (rather than keeping
-            pre-existing ones), by default False
+        inputs : dict
+            The inputs for the tensor estimation workflow.
+        tensor_type : str
+            The tensor estimation method (either "dt", "rt or "dk")
 
         Returns
         -------
         dict
-            A dictionary with *tensor_types* as keys and a list of
-            tensor-derived metrics as values
+            A dictionary with keys of required kwargs and their
+            corresponding values
         """
-        dwis = self.get_subject_dwi(
-            participant_label, session, queries=self.DWI_QUERY_ENTITIES
-        )
-        result = {}
-        for tensor_type in tensor_types:
-            result[tensor_type] = []
-            for inputs in dwis:
-                outputs = self.run_single_input(
-                    inputs, tensor_type, out_metrics, force
-                )
-                result[tensor_type].append(outputs)
-        return result
+        kwargs = {}
+        for key, value in (
+            self.TENSOR_TYPES.get(tensor_type).get("kwargs").items()
+        ):
+            if isinstance(value, Callable):
+                kwargs[key] = value(inputs)
+            else:
+                kwargs[key] = value
+        return kwargs
 
-    def run_single_subject(
+    def run(
         self,
-        participant_label: str,
-        session: Union[List, str] = None,
-        tensor_type: Union[List, str] = None,
-        out_metrics: Union[List, str] = None,
-        force: bool = False,
-    ) -> dict:
+        sessions: str = None,
+        tensor_types: Union[str, list] = None,
+        force: bool = True,
+    ):
         """
-        Run tensor-derived metrics' estimation for all available DWIs under
-        *participant_label*.
+        Run the tensor estimation workflow.
 
         Parameters
         ----------
-        participant_label : str
-            Specific participants' labels to be queried
-        session : Union[List, str], optional
-            Specific session's ID, by default None
-        tensor_type : Union[List, str], optional
-            The tensor estimation method (either "dt" or "dk")
-        out_metrics : Union[List, str], optional
-            Requested tensor-derived outputs, by default All available, by
-            default None
-        force : bool
-            Whether to force the creation of outputs (rather than keeping
-            pre-existing ones), by default False
-
-        Returns
-        -------
-        dict
-            A nested dictionary with sessions as keys and a dictionary for
-            each *tensor_type* as values
-        """
-        tensor_types, sessions, out_metrics = self.validate_single_subject_run(
-            participant_label, session, tensor_type, out_metrics
-        )
-        result = {}
-        for session in sessions:
-            result[session] = self.run_single_session(
-                participant_label, session, tensor_types, out_metrics, force
-            )
-        return result
-
-    def run_dataset(
-        self,
-        participant_label: Union[str, list] = None,
-        tensor_type: Union[List, str] = None,
-        out_metrics: Union[List, str] = None,
-        force: bool = False,
-    ) -> dict:
-        """
-        Run tensor estimation for an entire dataset
-
-        Parameters
-        ----------
-        participant_label : Union[str, list], optional
-            Specific subject/s within the dataset to run, by default None
-        tensor_type : Union[List, str], optional
-            Type of tensor estimation to perform, by default All implemented
-        out_metrics : Union[List, str], optional
-            Specific metric of the tensor to produce, by default All
+        session : str, optional
+            Specific session to run, by default All available
+        tensor_type : str, optional
+            The tensor estimation method (either "dt" or "dk") ,by default None
         force : bool, optional
-            Whether to remove existing products and generate new ones, by default False # noqa
-
-        Returns
-        -------
-        dict
-            Dictionary with keys of subjects and values of session-wise tensor estimation's products
+             , by default True
         """
-        tensor_metrics = {}
-        if participant_label:
-            if isinstance(participant_label, str):
-                participant_labels = [participant_label]
-            elif isinstance(participant_label, list):
-                participant_labels = [participant_label]
-        else:
-            participant_labels = list(self.subjects.keys())
-        for participant_label in tqdm.tqdm(participant_labels):
-            try:
-                sessions = self.subjects.get(participant_label)
-                tensor_metrics[participant_label] = self.run_single_subject(
-                    participant_label=participant_label,
-                    session=sessions,
-                    tensor_type=tensor_type,
-                    out_metrics=out_metrics,
-                    force=force,
+        tensor_types = self.listify_tensor_type(tensor_types)
+        sessions = self.listify_sessions(sessions)
+        output = {}
+        for session in sessions:
+            output[session] = {}
+            for tensor_type in tensor_types:
+                output[session][tensor_type] = self.run_tensor_workflow(
+                    session, tensor_type, force=force
                 )
-            except TypeError:
-                continue
+        return output
+
+
+def _gen_output_name(
+    output: str,
+    parent: Union[str, Path],
+    source: Union[str, Path],
+    entities: dict,
+):
+    output_parts = output.split("_")
+    if len(output_parts) > 1:
+        output_desc = "".join([output_parts[0], output_parts[1].capitalize()])
+    else:
+        output_desc = output
+    return str(
+        Path(parent)
+        / build_relative_path(
+            source,
+            {"desc": output_desc, **entities},
+        )
+    )
