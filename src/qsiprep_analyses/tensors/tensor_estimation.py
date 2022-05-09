@@ -1,10 +1,11 @@
 """
 Definition of the :class:`TensorEstimation` class.
 """
-import warnings
+import logging
 from pathlib import Path
 from typing import Callable, List, Union
 
+from analyses_utils.entities.analysis.logger import get_console_handler
 from analyses_utils.entities.derivatives.qsiprep import QsiprepDerivatives
 from dipy.workflows.reconst import ReconstDkiFlow, ReconstDtiFlow
 
@@ -13,6 +14,8 @@ from qsiprep_analyses.qsiprep_analysis import QsiprepAnalysis
 from qsiprep_analyses.tensors.utils.functions import estimate_sigma
 from qsiprep_analyses.tensors.utils.messages import (
     INVALID_OUTPUT,
+    OUTPUTS_EXIST,
+    RECONSTRUCTION_WORKFLOW,
     TENSOR_RECONSTRUCTION_NOT_IMPLEMENTED,
 )
 from qsiprep_analyses.tensors.utils.templates import (
@@ -54,6 +57,8 @@ class TensorEstimation(QsiprepAnalysis):
         super().__init__(
             derivatives, base_dir, participant_label, sessions_base
         )
+        self.logger = logging.getLogger(__name__)
+        self.logger.addHandler(get_console_handler())
 
     def listify_tensor_type(self, tensor_types: Union[str, list]) -> List[str]:
         """
@@ -97,11 +102,11 @@ class TensorEstimation(QsiprepAnalysis):
         """
         if tensor_type not in self.TENSOR_TYPES:
             if strict:
-                raise NotImplementedError(
-                    TENSOR_RECONSTRUCTION_NOT_IMPLEMENTED.format(
-                        tensor_type=tensor_type
-                    )
+                msg = TENSOR_RECONSTRUCTION_NOT_IMPLEMENTED.format(
+                    tensor_type=tensor_type
                 )
+                self.logger.error(msg)
+                raise NotImplementedError(msg)
             else:
                 return False
         return True
@@ -126,8 +131,7 @@ class TensorEstimation(QsiprepAnalysis):
         if output in self.METRICS.get(tensor_type):
             return True
         else:
-
-            warnings.warn(
+            self.logger.warning(
                 INVALID_OUTPUT.format(
                     output=output,
                     tensor_type=tensor_type,
@@ -194,6 +198,35 @@ class TensorEstimation(QsiprepAnalysis):
             inputs[val] = str(self.get_derivative(session, key))
         return inputs
 
+    def format_reconstruction_message(
+        self, tensor_type: str, session: str, kwargs: dict, outputs_exist: bool
+    ) -> str:
+        """
+        Formats a tensor reconstruction message.
+
+        Parameters
+        ----------
+        kwargs : dict
+            The kwargs to be formatted
+
+        Returns
+        -------
+        str
+            The formatted message
+        """
+        parameters = dict(
+            participant_label=str(self.derivatives.participant),
+            session=session,
+        )
+        parameters.update(kwargs)
+        if not outputs_exist:
+            msg = RECONSTRUCTION_WORKFLOW.format(tensor_type=tensor_type)
+        else:
+            msg = OUTPUTS_EXIST.format(tensor_type=tensor_type)
+        for key, val in kwargs.items():
+            msg += f"\n{key}: {val}"
+        return msg
+
     def run_tensor_workflow(
         self,
         session: str,
@@ -213,18 +246,29 @@ class TensorEstimation(QsiprepAnalysis):
         outputs : List[str], optional
             Requested tensor-derived outputs, by default All available
         """
+        if not self.validate_tensor_type(tensor_type):
+            return
         inputs = self.get_inputs(session)
         outputs = self.build_output_dictionary(
             inputs.get("input_files"), tensor_type, outputs
         )
-        output_exists = [Path(val).exists() for val in outputs.values()]
-        if all(output_exists) and not force:
-            return outputs
-        if self.validate_tensor_type(tensor_type):
-            workflow = self.TENSOR_WORKFLOWS.get(tensor_type)()
-            workflow.run(
-                **inputs, **outputs, **self.get_kwargs(inputs, tensor_type)
+        kwargs = dict(
+            **inputs, **outputs, **self.get_kwargs(inputs, tensor_type)
+        )
+        outputs_exist = [Path(val).exists() for val in outputs.values()]
+        if all(outputs_exist):
+            msg = self.format_reconstruction_message(
+                tensor_type, session, kwargs, outputs_exist
             )
+            self.logger.warning(msg)
+            if not force:
+                return outputs
+        workflow = self.TENSOR_WORKFLOWS.get(tensor_type)()
+        msg = self.format_reconstruction_message(
+            tensor_type, session, kwargs, False
+        )
+        self.logger.info(msg)
+        workflow.run(**kwargs)
         return outputs
 
     def get_kwargs(self, inputs: dict, tensor_type: str) -> dict:
@@ -275,6 +319,7 @@ class TensorEstimation(QsiprepAnalysis):
         tensor_types = self.listify_tensor_type(tensor_types)
         sessions = self.listify_sessions(sessions)
         output = {}
+
         for session in sessions:
             output[session] = {}
             for tensor_type in tensor_types:

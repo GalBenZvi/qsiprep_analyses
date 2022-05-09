@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from typing import Union
 
@@ -8,6 +9,17 @@ from qsiprep_analyses.utils.messages import (
     BASE_DIR_AND_PARTICIPANT_REQUIRED,
     MUTUALLY_EXCLUSIVE,
 )
+
+SIMPLE_LOGGING_FORMAT = "%(name)s - %(levelname)s\n\t%(message)s"
+
+
+def get_console_handler() -> logging.StreamHandler:
+    """
+    Returns a console handler for logging.
+    """
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter(SIMPLE_LOGGING_FORMAT))
+    return console_handler
 
 
 def validate_instantiation(

@@ -1,3 +1,5 @@
+import datetime
+import logging
 from pathlib import Path
 from typing import List, Union
 
@@ -31,9 +33,17 @@ class QsiprepAnalysis(Analysis):
             Where to look for available sessions
             under participant's label , by default None
         """
-        self.derivatives = validate_instantiation(
+        derivatives = validate_instantiation(
             derivatives, base_dir, sessions_base, participant_label
         )
+        super().__init__(derivatives)
+        timestamp = datetime.datetime.today().strftime("%Y-%m-%d_%H%M%S")
+        self.init_logger(
+            name=self.LOGGER_FILE_FORMAT.format(
+                name=__name__, timestamp=timestamp
+            )
+        )
+        self.logger = logging.getLogger(__name__)
 
     def listify_sessions(self, sessions: Union[str, list]) -> List[str]:
         """
