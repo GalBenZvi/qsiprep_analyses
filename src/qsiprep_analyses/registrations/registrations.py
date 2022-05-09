@@ -15,7 +15,7 @@ from nilearn.image.resampling import resample_to_img
 
 from qsiprep_analyses.data.bids import build_relative_path
 from qsiprep_analyses.qsiprep_analysis import QsiprepAnalysis
-from qsiprep_analyses.registrations.utils import (
+from qsiprep_analyses.registrations.utils.utils import (
     ANAT_REG_KEYS,
     DEFAULT_PARCELLATION_NAMING,
     PROBSEG_THRESHOLD,
