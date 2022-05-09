@@ -4,3 +4,7 @@ INVALID_PARTICIPANT = "participant_label must describe an existing participant i
 #: Warnings
 INVALID_OUTPUT = """Requested output {output} is not a valid ({tensor_type}) tensor-derived metric.
 Available metrics are: {available_metrics}"""  # noqa: E501
+#: Messages
+RUNNING_PARTICIPANT = "Executing "
+RECONSTRUCTION_WORKFLOW = """Executing {tensor_type} reconstruction workflow with the following parameters:"""  # noqa: E501
+OUTPUTS_EXIST = """Outputs for {tensor_type} reconstruction already exist for the following paramters:"""  # noqa: E501
