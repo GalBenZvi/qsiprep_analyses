@@ -1,5 +1,4 @@
 import datetime
-import logging
 from pathlib import Path
 from typing import List, Union
 
@@ -43,7 +42,7 @@ class QsiprepAnalysis(Analysis):
                 name=__name__, timestamp=timestamp
             )
         )
-        self.logger = logging.getLogger(__name__)
+        # self.logger = logging.getLogger(__name__)
 
     def listify_sessions(self, sessions: Union[str, list]) -> List[str]:
         """
@@ -67,3 +66,15 @@ class QsiprepAnalysis(Analysis):
             return sessions
         else:
             return self.derivatives.sessions
+
+    @property
+    def participant_label(self) -> str:
+        """
+        Returns the participant's label.
+
+        Returns
+        -------
+        str
+            The participant's label.
+        """
+        return self.derivatives.participant.label
