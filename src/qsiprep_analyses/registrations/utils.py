@@ -1,33 +1,25 @@
 QUERIES = dict(
     mni2native={
-        "from": "MNI152NLin2009cAsym",
-        "to": "T1w",
-        "mode": "image",
-        "suffix": "xfm",
+        "main_key": "subject_specific",
+        "sub_key": "mni_to_native_transform",
     },
     native2mni={
-        "from": "T1w",
-        "to": "MNI152NLin2009cAsym",
-        "mode": "image",
-        "suffix": "xfm",
+        "main_key": "subject_specific",
+        "sub_key": "native_to_mni_transform",
     },
     anat_reference={
-        "desc": "preproc",
-        "suffix": "T1w",
-        "datatype": "anat",
-        "space": None,
-        "extension": ".nii.gz",
+        "main_key": "subject_specific",
+        "sub_key": "native_T1w",
     },
-    dwi_reference={
-        "desc": "preproc",
-        "datatype": "dwi",
-        "suffix": "dwi",
-        "space": "T1w",
-        "extension": ".nii.gz",
+    probseg={
+        "main_key": "subject_specific",
+        "sub_key": "native_gm",
     },
-    probseg={"suffix": "probseg"},
+    dwi_reference={"sub_key": "coreg_dwi_image"},
 )
 
+#: anatomical registration kets
+ANAT_REG_KEYS = ["mni2native", "anat_reference", "probseg"]
 #: Naming
 DEFAULT_PARCELLATION_NAMING = dict(space="T1w", suffix="dseg", desc="")
 

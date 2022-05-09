@@ -1,19 +1,22 @@
 """
 Definition of the :class:`NativeRegistration` class.
 """
+import logging
 from pathlib import Path
 from typing import Tuple, Union
 
 import nibabel as nib
+from analyses_utils.entities.analysis.logger import get_console_handler
+from analyses_utils.entities.derivatives.qsiprep import QsiprepDerivatives
 from brain_parts.parcellation.parcellations import (
     Parcellation as parcellation_manager,
 )
 from nilearn.image.resampling import resample_to_img
-from nipype.interfaces.base import TraitError
-from tqdm import tqdm
 
-from qsiprep_analyses.manager import QsiprepManager
+from qsiprep_analyses.data.bids import build_relative_path
+from qsiprep_analyses.qsiprep_analysis import QsiprepAnalysis
 from qsiprep_analyses.registrations.utils import (
+    ANAT_REG_KEYS,
     DEFAULT_PARCELLATION_NAMING,
     PROBSEG_THRESHOLD,
     QUERIES,
@@ -21,9 +24,9 @@ from qsiprep_analyses.registrations.utils import (
 )
 
 
-class NativeRegistration(QsiprepManager):
+class NativeRegistration(QsiprepAnalysis):
+    #: Queries
     QUERIES = QUERIES
-
     #: Naming
     DEFAULT_PARCELLATION_NAMING = DEFAULT_PARCELLATION_NAMING
 
@@ -35,14 +38,20 @@ class NativeRegistration(QsiprepManager):
 
     def __init__(
         self,
-        base_dir: Path,
-        participant_labels: Union[str, list] = None,
-    ) -> None:
-        super().__init__(base_dir, participant_labels)
-        self.parcellation_manager = parcellation_manager()
+        derivatives: QsiprepDerivatives = None,
+        base_dir: Union[Path, str] = None,
+        participant_label: str = None,
+        sessions_base: str = None,
+    ):
+        super().__init__(
+            derivatives, base_dir, participant_label, sessions_base
+        )
+        self.logger = logging.getLogger(__name__)
+        self.logger.addHandler(get_console_handler())
+        self.parcellation_manager = parcellation_manager(logger=self.logger)
 
-    def initiate_subject(
-        self, participant_label: str
+    def collect_requirements(
+        self,
     ) -> Tuple[dict, Path, Path]:
         """
         Query initially-required patricipant's files
@@ -57,20 +66,15 @@ class NativeRegistration(QsiprepManager):
         Tuple[dict,Path,Path]
             A tuple of required files for parcellation registration.
         """
+        self.logger.info(
+            f"Initiating registration process for participant sub-{self.participant_label}"  # noqa
+        )
         return [
-            grabber(participant_label, queries=self.QUERIES)
-            for grabber in [
-                self.get_transforms,
-                self.get_reference,
-                self.get_probseg,
-            ]
+            self.get_derivative(**QUERIES.get(key)) for key in ANAT_REG_KEYS
         ]
 
     def build_output_dictionary(
-        self,
-        parcellation_scheme: str,
-        reference: Path,
-        reference_type: str,
+        self, parcellation_scheme: str, reference: Path, resolution: str
     ) -> dict:
         """
         Based on a *reference* image,
@@ -80,7 +84,7 @@ class NativeRegistration(QsiprepManager):
         ----------
         reference : Path
             The reference image.
-        reference_type : str
+        resolution : str
             The reference image type (either "anat" or "dwi")
 
         Returns
@@ -91,20 +95,23 @@ class NativeRegistration(QsiprepManager):
         """
         basic_query = dict(
             atlas=parcellation_scheme,
-            resolution=reference_type,
-            **self.DEFAULT_PARCELLATION_NAMING.copy(),
+            resolution=resolution,
+            **self.DEFAULT_PARCELLATION_NAMING,
         )
         outputs = dict()
-        for key, label in zip(["whole_brain", "gm_cropped"], ["", "GM"]):
+        for key, label in zip(
+            ["whole_brain", "gm_cropped"], ["WholeBrain", "GM"]
+        ):
             query = basic_query.copy()
             query["label"] = label
-            outputs[key] = self.data_grabber.build_path(reference, query)
+            outputs[key] = self.derivatives.path.parent / build_relative_path(
+                reference, query
+            )
         return outputs
 
     def register_to_anatomical(
         self,
         parcellation_scheme: str,
-        participant_label: str,
         probseg_threshold: float = None,
         force: bool = False,
     ) -> dict:
@@ -127,26 +134,24 @@ class NativeRegistration(QsiprepManager):
         dict
             A dictionary with keys of "whole_brain" and "gm_cropped" native-spaced parcellation schemes.
         """
-        transforms, reference, gm_probseg = self.initiate_subject(
-            participant_label
-        )
+        mni2native, reference, gm_probseg = self.collect_requirements()
         whole_brain, gm_cropped = [
             self.build_output_dictionary(
-                parcellation_scheme, reference, "anat"
+                parcellation_scheme, reference, resolution="anat"
             ).get(key)
             for key in ["whole_brain", "gm_cropped"]
         ]
         self.parcellation_manager.register_parcellation_scheme(
             parcellation_scheme,
-            participant_label,
+            self.participant_label,
             reference,
-            transforms.get("mni2native"),
+            mni2native,
             whole_brain,
             force=force,
         )
         self.parcellation_manager.crop_to_probseg(
             parcellation_scheme,
-            participant_label,
+            self.participant_label,
             whole_brain,
             gm_probseg,
             gm_cropped,
@@ -158,7 +163,6 @@ class NativeRegistration(QsiprepManager):
     def register_dwi(
         self,
         parcellation_scheme: str,
-        participant_label: str,
         session: str,
         anatomical_whole_brain: Path,
         anatomical_gm_cropped: Path,
@@ -180,15 +184,11 @@ class NativeRegistration(QsiprepManager):
         force : bool, optional
             Whether to re-write existing files, by default False
         """
-        reference = self.get_reference(
-            participant_label,
-            "dwi",
-            {"session": session},
-            queries=self.QUERIES,
-        )
+        self.logger.info("Resampling parcellation scheme to DWI space")
+        reference = self.get_derivative(session, "coreg_dwi_image")
         if not reference:
             raise FileNotFoundError(
-                f"Could not find reference file for subject {participant_label}!"  # noqa
+                f"Could not find DWI reference file for subject {self.participant_label}!"  # noqa
             )
         whole_brain, gm_cropped = [
             self.build_output_dictionary(
@@ -208,10 +208,9 @@ class NativeRegistration(QsiprepManager):
 
         return whole_brain, gm_cropped
 
-    def run_single_subject(
+    def run(
         self,
         parcellation_scheme: str,
-        participant_label: str,
         session: Union[str, list] = None,
         probseg_threshold: float = None,
         force: bool = False,
@@ -240,19 +239,15 @@ class NativeRegistration(QsiprepManager):
         """
         outputs = {}
         anat_whole_brain, anat_gm_cropped = self.register_to_anatomical(
-            parcellation_scheme, participant_label, probseg_threshold, force
+            parcellation_scheme, probseg_threshold, force
         )
         outputs["anat"] = {
             "whole_brain": anat_whole_brain,
             "gm_cropped": anat_gm_cropped,
         }
-        sessions = self.subjects.get(participant_label) or session
-        if isinstance(sessions, str):
-            sessions = [sessions]
-        for session in sessions:
+        for session in self.listify_sessions(session):
             whole_brain, gm_cropped = self.register_dwi(
                 parcellation_scheme,
-                participant_label,
                 session,
                 anat_whole_brain,
                 anat_gm_cropped,
@@ -263,46 +258,3 @@ class NativeRegistration(QsiprepManager):
                 "gm_cropped": gm_cropped,
             }
         return outputs
-
-    def run_dataset(
-        self,
-        parcellation_scheme: str,
-        participant_label: Union[str, list] = None,
-        probseg_threshold: float = None,
-        force: bool = False,
-    ):
-        """
-        Register *parcellation_scheme* to all available (or requested) subjects' native space.
-
-        Parameters
-        ----------
-        parcellation_scheme : str
-            A string representing existing key within *self.parcellation_manager.parcellations*. # noqa
-        participant_label : Union[str, list], optional
-            Specific subject/s within the dataset to run, by default None
-        probseg_threshold : float, optional
-            Threshold for probability segmentation masking, by default None
-        force : bool, optional
-            Whether to remove existing products and generate new ones, by default False # noqa
-        """
-        native_parcellations = {}
-        if participant_label:
-            if isinstance(participant_label, str):
-                participant_labels = [participant_label]
-            elif isinstance(participant_label, list):
-                participant_labels = participant_label
-        else:
-            participant_labels = list(sorted(self.subjects.keys()))
-        for participant_label in tqdm(participant_labels):
-            try:
-                native_parcellations[
-                    participant_label
-                ] = self.run_single_subject(
-                    parcellation_scheme,
-                    participant_label,
-                    probseg_threshold=probseg_threshold,
-                    force=force,
-                )
-            except (FileNotFoundError, TraitError):
-                continue
-        return native_parcellations
